@@ -5,5 +5,3 @@ dist/
 *.crx
 *.pem
 dist-firefox/
-*.apk
-*.jks
