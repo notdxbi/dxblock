@@ -14,8 +14,10 @@
     let observer = null;
     let active = true;
 
+    window.__dxbApplied = [];    // read by the popup's "elements hidden" counter
     const addCSS = (css) => {
         if (!css || !active) return;
+        for (const line of css.split('\n')) if (line.endsWith('{display:none!important}')) window.__dxbApplied.push(line.slice(0, -24));
         try {
             const sheet = new CSSStyleSheet();
             sheet.replaceSync(css);

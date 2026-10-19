@@ -139,7 +139,7 @@ try {
         const blocked = Number(/(\d+)\s*blocked/.exec(t)?.[1]);
         return { total, blocked };
     });
-    check('turtlecute ad-block test', BASELINE ? true : r.blocked / r.total >= 0.9, `${r.blocked}/${r.total} blocked`);
+    check('turtlecute ad-block test', BASELINE ? true : r.blocked === r.total, `${r.blocked}/${r.total} blocked`);
 } catch (e) {
     check('turtlecute ad-block test', false, e.message.split('\n')[0]);
 }
@@ -172,6 +172,21 @@ if (sw) {
     const ext = await ctx.newPage();
     await ext.goto(`chrome-extension://${extId}/options/options.html`);
     const msg = (m) => ext.evaluate((x) => chrome.runtime.sendMessage(x), m);
+
+    // Blocked counter + badge
+    await page.goto(`http://localhost:${port}/`);
+    await page.waitForTimeout(2500);
+    const pageTab = await ext.evaluate(async () => (await chrome.tabs.query({ url: 'http://localhost/*' }))[0]?.id);
+    const st = await msg({ type: 'popup:state', tabId: pageTab });
+    const badge = await sw.evaluate((id) => chrome.action.getBadgeText({ tabId: id }), pageTab);
+    check('blocked counter counts requests', st.stats.blocked >= 3, `blocked ${st.stats.blocked} (ads ${st.stats.ads}, trackers ${st.stats.trackers}), hidden ${st.hidden}, feed ${st.recent.length}`);
+    check('toolbar badge shows the count', Number(badge) === st.stats.blocked, `badge "${badge}"`);
+    check('elements hidden counted', st.hidden >= 3, `${st.hidden}`);
+
+    // Dangerous page -> warning page
+    await page.goto('https://vlc.de/', { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    check('dangerous page shows dx.block warning', page.url().includes('/blocked/blocked.html'), page.url().slice(0, 90));
 
     // Pop-up blocker
     await page.goto(`http://localhost:${port}/`);
@@ -224,10 +239,13 @@ if (sw) {
     await ext.reload();
     await ext.waitForTimeout(800);
     await ext.screenshot({ path: path.join(os.tmpdir(), 'dxblock-options.png') });
+    await page.goto('https://adblock.turtlecute.org/', { timeout: 45000 }).catch(() => {});
+    await page.waitForTimeout(6000);
+    const liveTab = await ext.evaluate(async () => (await chrome.tabs.query({ url: 'https://adblock.turtlecute.org/*' }))[0]?.id);
     const pop = await ctx.newPage();
-    await pop.setViewportSize({ width: 330, height: 420 });
-    await pop.goto(`chrome-extension://${extId}/popup/popup.html`);
-    await pop.waitForTimeout(800);
+    await pop.setViewportSize({ width: 360, height: 640 });
+    await pop.goto(`chrome-extension://${extId}/popup/popup.html?tab=${liveTab}`);
+    await pop.waitForTimeout(1600);
     await pop.screenshot({ path: path.join(os.tmpdir(), 'dxblock-popup.png') });
     await pop.close();
     await ext.close();

@@ -15,7 +15,11 @@ scriptlets, a pop-up blocker and an element picker.
 - **Procedural filters**: `:has-text()`, `:upward()`, `:remove()`, `:xpath()` and more, via AdGuard ExtendedCss
 - **Scriptlets**: the same anti-adblock / YouTube defusers uBlock Origin and AdGuard use (AdGuard Scriptlets), injected before page scripts
 - **Surrogates**: ad scripts that sites depend on are swapped for harmless stand-ins instead of breaking the page
-- **Pop-up & pop-under blocking**: closes ad pop-ups using EasyList's `$popup` filters
+- **Pop-up blocking**: closes ad pop-ups using EasyList's `$popup` filters, any pop-up to 60k known ad / scam / malware domains, and pop-ups opened by ad iframes
+- **Cookie banners & nag pop-ups**: uBlock and AdGuard annoyance lists, on by default
+- **Dangerous-page warning**: scam and malware pages are replaced by a dx.block warning with *Go back* / *Proceed anyway*
+- **Live dashboard**: an animated scanner popup with per-page counts (ads, trackers, hidden elements, pop-ups), a live feed of what's being blocked, and a toolbar badge
+- **MV3 gap fillers**: uBO HTML filters (`##^script:has-text`) run as `remove-node-text` scriptlets, `redirect-rule`s and `example.*` domains are converted, `:matches-path()` is evaluated at navigation, and ad-domain XHRs are hard-blocked except for ad *scripts*, which keep uBO's stealth empty response so anti-adblock walls stay quiet
 - **Tracking-parameter stripping**: removes `fbclid`, `gclid` and hundreds more from links
 - **Element picker**: right-click → *Block element…*, choose how specific the rule should be, done
 - **Per-site switch**, custom filters (ABP / uBO / AdGuard syntax) and an allowlist
@@ -24,16 +28,17 @@ scriptlets, a pop-up blocker and an element picker.
 
 | On by default | Optional |
 |---|---|
-| EasyList · EasyPrivacy · uBlock filters, quick fixes, unbreak, privacy, badware · AdGuard Base · AdGuard URL Tracking · Peter Lowe's list · HaGeZi Multi PRO · Malicious URL Blocklist | uBlock cookie notices & annoyances · AdGuard cookie notices · Fanboy's Annoyance |
+| EasyList · EasyPrivacy · uBlock filters, quick fixes, unbreak, privacy, badware, cookie notices, annoyances · AdGuard Base, URL Tracking, cookie notices · Peter Lowe's list · HaGeZi Multi PRO · Malicious URL Blocklist · dx.block fixes | Fanboy's Annoyance |
 
 ## Results
 
 Automated tests (`npm test`) load the extension in a clean Chromium and check real pages:
 
-- adblock.turtlecute.org: **122 / 132** (the remainder are ad requests deliberately answered with an empty response, which defeats ad-block detection but the test counts as "not blocked"; uBlock Origin shows the same)
+- adblock.turtlecute.org: **132 / 132**
 - YouTube: ad placements removed from the player response
 - Generic, specific and late-inserted ads hidden; real content untouched
-- Pop-ups to ad domains closed; `fbclid`/`gclid` stripped; allowlist, custom filters and picker work
+- Pop-ups to ad domains closed; scam pages show the warning page; `fbclid`/`gclid` stripped
+- Blocked counter, toolbar badge and hidden-element count; allowlist, custom filters and picker work
 
 ## Install
 

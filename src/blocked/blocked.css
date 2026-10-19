@@ -1,0 +1,17 @@
+html, body { height: 100%; }
+body { display: grid; place-items: center; background: radial-gradient(1200px 600px at 50% -10%, rgba(229,9,20,.16), transparent 60%), var(--bg); }
+main { max-width: 560px; padding: 32px 24px; text-align: center; }
+.shield { position: relative; width: 112px; height: 112px; margin: 0 auto 22px; display: grid; place-items: center; }
+.shield svg { width: 84px; height: 84px; fill: var(--accent); filter: drop-shadow(0 8px 30px rgba(229,9,20,.45)); position: relative; z-index: 1; }
+.ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(229,9,20,.55); animation: ping 2.4s cubic-bezier(.2,.6,.3,1) infinite; }
+.ring.r2 { animation-delay: 1.2s; }
+@keyframes ping { from { transform: scale(.6); opacity: .9; } to { transform: scale(1.5); opacity: 0; } }
+.eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 0 6px; }
+.eyebrow b { color: var(--accent); }
+h1 { font-size: 30px; margin: 0 0 10px; }
+.lead { color: var(--muted); margin: 0 auto 18px; }
+.url { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; word-break: break-all; font: 13px ui-monospace, monospace; color: var(--text); margin-bottom: 22px; }
+.actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.small { font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .ring { animation: none; opacity: .3; } }

@@ -29,6 +29,7 @@
   },
   "permissions": [
     "declarativeNetRequest",
+    "webRequest",
     "scripting",
     "storage",
     "webNavigation",

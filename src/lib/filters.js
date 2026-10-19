@@ -142,6 +142,15 @@ export function isEntity(h) {
     return ENTITY_RE.test(h);
 }
 
+// DNR can't express "example.*": network filters expand it to the TLDs that matter in practice
+export const ENTITY_TLDS = ['com', 'net', 'org', 'io', 'co', 'me', 'tv', 'cc', 'to', 'info', 'biz', 'xyz', 'site', 'online',
+    'top', 'club', 'live', 'pro', 'app', 'ws', 'nu', 'one', 'link', 'click', 'lol', 'vip', 'fun', 'icu', 'sx', 'gg', 'is',
+    'ru', 'su', 'de', 'fr', 'it', 'es', 'nl', 'pl', 'pt', 'se', 'no', 'dk', 'fi', 'cz', 'sk', 'hu', 'ro', 'gr', 'tr', 'ua',
+    'uk', 'co.uk', 'ie', 'be', 'at', 'ch', 'ca', 'us', 'mx', 'br', 'com.br', 'ar', 'com.ar', 'cl', 'pe', 'in', 'co.in',
+    'jp', 'co.jp', 'kr', 'cn', 'hk', 'tw', 'sg', 'id', 'co.id', 'ph', 'vn', 'th', 'my', 'pk', 'au', 'com.au', 'nz', 'za',
+    'ng', 'eg', 'sa', 'ae', 'ir', 'il', 'lt', 'lv', 'ee', 'bg', 'rs', 'hr', 'si', 'ba', 'mk', 'al', 'by', 'kz', 'uz', 'am'];
+const expandEntities = (list) => list.flatMap((e) => ENTITY_TLDS.map((t) => e.slice(0, -1) + t));
+
 // "a.com,~b.a.com" or "a.com|~b.com" -> { include: [...], exclude: [...], entityInclude, entityExclude }
 export function parseDomainList(str, sep = ',') {
     const res = { include: [], exclude: [], entityInclude: [], entityExclude: [], invalid: false };
@@ -262,10 +271,10 @@ export function convertNetworkFilter(text, { user = false } = {}) {
         case 'domain': case 'from': {
             const d = parseDomainList(value, '|');
             if (d.invalid && !d.include.length && !d.exclude.length) return null;
-            // Entity domains (google.*) can't be expressed in DNR: drop them
-            if (d.entityInclude.length && !d.include.length) return null;
-            if (d.include.length) cond.initiatorDomains = d.include;
-            if (d.exclude.length) cond.excludedInitiatorDomains = d.exclude;
+            const inc = [...d.include, ...expandEntities(d.entityInclude)];
+            const exc = [...d.exclude, ...expandEntities(d.entityExclude)];
+            if (inc.length) cond.initiatorDomains = inc;
+            if (exc.length) cond.excludedInitiatorDomains = exc;
             break;
         }
         case 'to': case 'denyallow': {
@@ -273,8 +282,8 @@ export function convertNetworkFilter(text, { user = false } = {}) {
             if (name === 'denyallow') {
                 if (d.include.length) cond.excludedRequestDomains = d.include;
             } else {
-                if (d.entityInclude.length && !d.include.length) return null;
-                if (d.include.length) cond.requestDomains = d.include;
+                const inc = [...d.include, ...expandEntities(d.entityInclude)];
+                if (inc.length) cond.requestDomains = inc;
                 if (d.exclude.length) cond.excludedRequestDomains = d.exclude;
             }
             break;
@@ -302,8 +311,11 @@ export function convertNetworkFilter(text, { user = false } = {}) {
             redirect = value.replace(/^abp-resource:/, '').replace(/:\d+$/, '');
             break;
         case 'redirect-rule':
-            // Only meant to apply when something else blocks the request; not expressible in DNR
-            return null;
+            // "Redirect only if something else blocks it" isn't expressible in DNR. When the pattern names a
+            // specific resource, redirecting it is equivalent (it would be blocked anyway); wildcards are skipped.
+            if (!/^\|\|[a-z0-9.-]+\.[a-z]{2,}[/^]/.test(rawPattern)) return null;
+            redirect = value.replace(/:\d+$/, '');
+            break;
         case 'empty':
             redirect = 'nooptext';
             break;
@@ -574,7 +586,7 @@ function mergeRemoveParams(rules) {
 // ---------------------------------------------------------------------------
 // Procedural (extended) pseudo-classes that need ExtendedCss instead of plain CSS
 const EXTENDED_RE = /:(?:-abp-has|-abp-contains|-abp-properties|has-text|contains|matches-css(?:-before|-after)?|matches-attr|matches-property|xpath|nth-ancestor|upward|remove|watch-attr|min-text-length|if|if-not|others|matches-path|style)\(|:remove\(\)/;
-const UNSUPPORTED_RE = /:(?:matches-path|others|watch-attr|matches-media)\(/;
+const UNSUPPORTED_RE = /:(?:others|watch-attr|matches-media)\(/;
 
 // Returns a cosmetic entry or null.
 //   { type: 'hide', selector, domains, exception }
@@ -589,7 +601,15 @@ export function convertCosmeticFilter(c, scriptletConverter) {
     let body = c.body.trim();
     if (!body) return null;
 
-    if (sep.endsWith('^') || sep.startsWith('$')) return null;           // HTML filtering: not possible in MV3
+    if (sep.startsWith('$')) return null;                                  // AdGuard HTML filtering: not possible in MV3
+    if (sep.endsWith('^')) {
+        // uBO HTML filtering can't run in MV3. "script:has-text(x)" becomes AdGuard's remove-node-text scriptlet
+        // (removes matching inline scripts as they are parsed); other element filters become plain hiding.
+        const m = /^script:has-text\((.+)\)$/.exec(body);
+        if (m) return { type: 'scriptlet', calls: [{ name: 'remove-node-text', args: ['script', m[1]] }], domains, exception: sep.includes('@') };
+        if (/^responseheader\(|:has-text\(|:min-text-length/.test(body)) return null;
+        return { type: 'hide', selector: body, domains, exception: sep.includes('@') };
+    }
 
     // Scriptlets: uBO ##+js(...), AdGuard #%#//scriptlet(...), ABP #$#snippet
     if ((sep === '##' || sep === '#@#') && body.startsWith('+js(')) {

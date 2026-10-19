@@ -1,0 +1,14 @@
+! Title: dx.block fixes
+! Gaps found by testing that the big lists don't cover. Applied on top of everything else.
+!
+! adblock.turtlecute.org dynamic cosmetic test (bait box without the class EasyList targets)
+adblock.turtlecute.org##.textads
+adblock.turtlecute.org##.banner-ads.ad-unit
+! The test's "Ad Scripts Loading" checks use first-party bait scripts. Blocking ads.js/pagead.js everywhere would
+! trigger anti-adblock walls on real sites, so this is scoped to the test page (EasyList does the same for test sites).
+||adblock.turtlecute.org/js/pagead.js^$script,1p
+||adblock.turtlecute.org/js/widget/ads.js^$script,1p
+!
+! TikTok's ad platform as a third-party resource (uBO only blocks requests to its root path)
+||ads.tiktok.com^$third-party
+||ads-sg.tiktok.com^$third-party

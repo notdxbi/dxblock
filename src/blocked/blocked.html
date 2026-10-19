@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blocked by dx.block</title>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <main>
+    <div class="shield" aria-hidden="true">
+      <svg viewBox="0 0 128 128"><path d="M64 10 L108 26 V62 C108 90 89 108 64 118 C39 108 20 90 20 62 V26 Z"/></svg>
+      <span class="ring"></span><span class="ring r2"></span>
+    </div>
+    <p class="eyebrow">dx<b>.</b>block protected you</p>
+    <h1>This page was blocked</h1>
+    <p class="lead">The address is on a list of known ad, scam or malware pages. Opening it could expose you to malicious downloads, phishing or unwanted redirects.</p>
+    <code id="url" class="url">…</code>
+    <div class="actions">
+      <button class="primary" id="back">Go back to safety</button>
+      <button id="proceed" class="ghost">Proceed anyway</button>
+    </div>
+    <p class="muted small">If you trust this page, “Proceed anyway” allows it until you close the browser.</p>
+  </main>
+  <script src="blocked.js" type="module"></script>
+</body>
+</html>

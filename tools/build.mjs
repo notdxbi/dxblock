@@ -36,6 +36,7 @@ const write = (rel, data) => {
 // 1. Download lists (with !#include files)
 // ---------------------------------------------------------------------------
 async function fetchText(url, cacheName) {
+    if (url.startsWith('local:')) return fs.readFileSync(path.join(ROOT, url.slice(6)), 'utf8');
     const file = path.join(CACHE, cacheName);
     if (OFFLINE && fs.existsSync(file)) return fs.readFileSync(file, 'utf8');
     const res = await fetch(url, { headers: { 'user-agent': `dx.block-build/${PKG.version}` } });
@@ -296,7 +297,7 @@ async function main() {
         }
 
         // Merge, validate, number
-        let merged = mergeRules(rules);
+        let merged = stealthSplit(mergeRules(rules));
         let regex = 0;
         merged = merged.filter((r) => {
             if (!r.condition.regexFilter) return true;
@@ -324,6 +325,24 @@ async function main() {
         write(`rulesets/${list.id}.json`, JSON.stringify(merged));
     }
     log(`site-wide tracking parameters stripped: ${globalParams.size}`);
+
+    // Domains whose pop-ups are always closed: ad servers, malware and scam hosts
+    const popupDomains = new Set();
+    for (const { list, merged } of compiled) {
+        if (!['pgl', 'urlhaus', 'ubo-badware', 'easylist'].includes(list.id)) continue;
+        for (const r of merged) {
+            const c = r.condition;
+            if (r.action.type !== 'block' || !c.requestDomains || c.initiatorDomains || c.domainType) continue;
+            if (list.id === 'easylist' && (c.resourceTypes || c.excludedInitiatorDomains)) continue;
+            c.requestDomains.forEach((d) => popupDomains.add(d));
+        }
+    }
+    for (const p of popups) {
+        const m = /^\^\[a-z\]\[a-z0-9\+\.-\]\*:\\\/\\\/\(\?:\[\^\\\/\?#\]\+\\\.\)\?([\w\\.-]+)\(\?:/.exec(p.re);
+        if (m && !p.allow && !p.d) popupDomains.add(m[1].replace(/\\\./g, '.'));
+    }
+    write('data/popup-domains.json', JSON.stringify([...popupDomains]));
+    log(`pop-up ad domains: ${popupDomains.size}`);
 
     const registry = [];
     const usedScriptlets = new Set();
@@ -424,6 +443,23 @@ async function main() {
     log(`default-enabled network rules: ${total}`);
     log(`registered content scripts: ${registry.length}`);
     log(`built dist/ (v${PKG.version})`);
+}
+
+// uBO answers generic ad-domain XHRs with an empty response ("stealth") so anti-adblock scripts can't tell.
+// Detectors fetch the well-known ad *scripts*, so keep the stealth reply for .js URLs and hard-block the rest.
+function stealthSplit(rules) {
+    const out = [];
+    for (const r of rules) {
+        const c = r.condition;
+        const stealth = r.action.type === 'redirect' && r.action.redirect.extensionPath
+            && /\/(nooptext|noopjs|noopjson)\./.test(r.action.redirect.extensionPath)
+            && c.resourceTypes?.length === 1 && c.resourceTypes[0] === 'xmlhttprequest'
+            && !c.initiatorDomains && !c.regexFilter;
+        if (!stealth) { out.push(r); continue; }
+        out.push({ priority: r.priority, action: { type: 'block' }, condition: c });
+        if (!c.urlFilter) out.push({ priority: r.priority + 1, action: r.action, condition: { ...c, urlFilter: '.js' } });
+    }
+    return out;
 }
 
 function copyDir(src, dst) {

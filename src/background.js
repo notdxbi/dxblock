@@ -3,6 +3,7 @@ import {
     classify, convertNetworkFilter, convertCosmeticFilter, preprocess, registerRedirect, PRIORITY, bucketOf
 } from './lib/filters.js';
 import { S as SCRIPTLETS, ALIASES, VERSION as SCRIPTLETS_VERSION } from './lib/scriptlet-lib.js';
+import * as stats from './stats.js';
 
 const DNR = chrome.declarativeNetRequest;
 const USER_RULE_BASE = 10_000;
@@ -22,6 +23,8 @@ const generic = (g) => json(`data/${g}-generic.json`);
 const entity = (g) => json(`data/${g}-entity.json`);
 const flags = () => json('data/flags.json');
 const sites = (g, host) => json(`data/${g}-sites-${bucketOf(host)}.json`);
+let popupDomainSet = null;
+const popupDomains = async () => (popupDomainSet ||= new Set(await json('data/popup-domains.json')));
 
 let redirectsReady = null;
 function ensureRedirects() {
@@ -250,7 +253,7 @@ async function syncAll(force = false) {
     await syncRulesets().catch((e) => console.warn('dx.block: rulesets', e));
     await syncDynamicRules().catch((e) => console.warn('dx.block: dynamic rules', e));
     await syncContentScripts({ force }).catch((e) => console.warn('dx.block: content scripts', e));
-    await DNR.setExtensionActionOptions({ displayActionCountAsBadgeText: true }).catch(() => {});
+    await DNR.setExtensionActionOptions({ displayActionCountAsBadgeText: false }).catch(() => {});
     await chrome.action.setBadgeBackgroundColor({ color: '#e50914' }).catch(() => {});
     await chrome.action.setBadgeTextColor?.({ color: '#ffffff' }).catch?.(() => {});
     await chrome.storage.session.set({ ready: Date.now() });
@@ -292,6 +295,8 @@ async function cosmeticTokens(url, tokens) {
     }
     return css;
 }
+
+const applied = new Map();   // tabId -> selectors injected by onNavigation (for the "elements hidden" count)
 
 // At navigation: entity filters (google.*), user filters, and scriptlets the static scripts can't cover
 async function onNavigation(details) {
@@ -356,7 +361,28 @@ async function onNavigation(details) {
         }
     }
 
-    if (css) chrome.scripting.insertCSS({ target, css, origin: 'USER' }).catch(() => {});
+    // uBO ":matches-path()" rules: keep the ones whose path matches this page, then strip the pseudo-class
+    const pathAndQuery = (() => { try { const u = new URL(url); return u.pathname + u.search; } catch { return '/'; } })();
+    for (let i = ext.length - 1; i >= 0; i--) {
+        const m = /:matches-path\((.+?)\)(?=$|[\s>+~.#[:])/.exec(ext[i]);
+        if (!m) continue;
+        const arg = m[1];
+        let ok;
+        try { ok = arg.startsWith('/') && arg.length > 2 && arg.endsWith('/') ? new RegExp(arg.slice(1, -1)).test(pathAndQuery) : pathAndQuery.includes(arg); } catch { ok = false; }
+        const rest = ext[i].replace(m[0], '').trim();
+        ext.splice(i, 1);
+        if (!ok || !rest) continue;
+        if (/:(?:-abp-|has-text|contains|matches-|xpath|nth-ancestor|upward|remove|min-text-length)/.test(rest) || /\{[^{}]*\}\s*$/.test(rest)) ext.push(rest);
+        else css += `${rest}{display:none!important}\n`;
+    }
+
+    if (css) {
+        chrome.scripting.insertCSS({ target, css, origin: 'USER' }).catch(() => {});
+        const sels = css.split('\n').map((l) => l.endsWith('{display:none!important}') ? l.slice(0, -24) : null).filter(Boolean);
+        applied.set(tabId, [...new Set([...(frameId === 0 ? [] : applied.get(tabId) || []), ...sels])].slice(0, 4000));
+    } else if (frameId === 0) {
+        applied.delete(tabId);
+    }
     for (const [name, args] of calls) {
         const fn = SCRIPTLETS[name];
         if (!fn) continue;
@@ -386,12 +412,14 @@ async function onNavigation(details) {
 // ---------------------------------------------------------------------------
 const popupCandidates = new Map();   // tabId -> { openerHost, at }
 
-async function popupBlocked(targetUrl, openerHost) {
+// sourceHost: the frame that opened the pop-up (an ad iframe opening a pop-up is always an ad)
+async function popupBlocked(targetUrl, openerHost, sourceHost = '') {
     if (!/^https?:/.test(targetUrl) || !openerHost) return false;
     if (await isDisabled(openerHost)) return false;
     const filters = await getPopupFilters();
     const chain = hostChain(openerHost);
-    const thirdParty = baseOf(hostOf(targetUrl)) !== baseOf(openerHost);
+    const targetHost = hostOf(targetUrl);
+    const thirdParty = baseOf(targetHost) !== baseOf(openerHost);
     let blocked = false;
     for (const p of filters) {
         if (p.t === 3 && !thirdParty) continue;
@@ -402,26 +430,79 @@ async function popupBlocked(targetUrl, openerHost) {
         if (p.allow) return false;
         blocked = true;
     }
-    return blocked;
+    if (blocked || !thirdParty) return blocked;
+    // Known ad servers, malware and scam domains
+    const ads = await popupDomains();
+    if (hostChain(targetHost).some((d) => ads.has(d))) return true;
+    if (sourceHost && sourceHost !== openerHost && hostChain(sourceHost).some((d) => ads.has(d))) return true;
+    return false;
+}
+
+function closePopup(tabId, openerTabId, url) {
+    chrome.tabs.remove(tabId).catch(() => {});
+    stats.record(openerTabId, 'popup', url);
 }
 
 chrome.webNavigation.onCreatedNavigationTarget.addListener(async (d) => {
-    const opener = await chrome.tabs.get(d.sourceTabId).catch(() => null);
+    const [opener, frame] = await Promise.all([
+        chrome.tabs.get(d.sourceTabId).catch(() => null),
+        d.sourceFrameId ? chrome.webNavigation.getFrame({ tabId: d.sourceTabId, frameId: d.sourceFrameId }).catch(() => null) : null
+    ]);
     const openerHost = hostOf(opener?.url || '');
-    popupCandidates.set(d.tabId, { openerHost, at: Date.now() });
+    const sourceHost = hostOf(frame?.url || '');
+    popupCandidates.set(d.tabId, { openerHost, sourceHost, opener: d.sourceTabId, at: Date.now() });
     setTimeout(() => popupCandidates.delete(d.tabId), 10_000);
-    if (await popupBlocked(d.url, openerHost)) chrome.tabs.remove(d.tabId).catch(() => {});
+    if (await popupBlocked(d.url, openerHost, sourceHost)) { popupCandidates.delete(d.tabId); closePopup(d.tabId, d.sourceTabId, d.url); }
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener(async (d) => {
     if (d.frameId !== 0) return;
     const c = popupCandidates.get(d.tabId);
     if (!c || Date.now() - c.at > 10_000) return;
-    if (await popupBlocked(d.url, c.openerHost)) {
+    if (await popupBlocked(d.url, c.openerHost, c.sourceHost)) {
         popupCandidates.delete(d.tabId);
-        chrome.tabs.remove(d.tabId).catch(() => {});
+        closePopup(d.tabId, c.opener, d.url);
     }
 });
+
+// ---------------------------------------------------------------------------
+// Counting what DNR blocked (observe-only webRequest) + the blocked-page warning
+// ---------------------------------------------------------------------------
+const EXT_ORIGIN = chrome.runtime.getURL('');
+const blockedPages = new Map();   // tabId -> URL shown on the warning page
+
+chrome.webRequest.onErrorOccurred.addListener((d) => {
+    if (d.error !== 'net::ERR_BLOCKED_BY_CLIENT' || d.tabId < 0) return;
+    if (d.type === 'main_frame') {
+        blockedPages.set(d.tabId, d.url);
+        stats.record(d.tabId, 'threat', d.url);
+        chrome.tabs.update(d.tabId, { url: `${EXT_ORIGIN}blocked/blocked.html#${encodeURIComponent(d.url)}` }).catch(() => {});
+        return;
+    }
+    stats.record(d.tabId, stats.kindOf(d.url), d.url);
+}, { urls: ['<all_urls>'] });
+
+chrome.webRequest.onBeforeRedirect.addListener((d) => {
+    if (d.tabId < 0) return;
+    if (d.redirectUrl.startsWith(EXT_ORIGIN)) { stats.record(d.tabId, 'stealth', d.url); return; }
+    // Query transform by a removeparam rule: same address, fewer parameters
+    try {
+        const a = new URL(d.url);
+        const b = new URL(d.redirectUrl);
+        if (a.origin === b.origin && a.pathname === b.pathname && b.search.length < a.search.length && /Internal Redirect/i.test(d.statusLine || '')) {
+            stats.record(d.tabId, 'param', d.url);
+        }
+    } catch { /* ignore */ }
+}, { urls: ['<all_urls>'] });
+
+chrome.webNavigation.onCommitted.addListener(async (d) => {
+    if (d.frameId !== 0) return;
+    if (d.url.startsWith(EXT_ORIGIN)) return;          // our own warning page keeps the counts
+    stats.resetTab(d.tabId, d.url);
+    if (await isDisabled(hostOf(d.url))) stats.setBadgeOff(d.tabId); else stats.setBadgeOn(d.tabId);
+});
+chrome.tabs.onRemoved.addListener((tabId) => { stats.removeTab(tabId); applied.delete(tabId); blockedPages.delete(tabId); });
+chrome.runtime.onConnect.addListener((port) => { if (port.name === 'live') stats.attachPort(port); });
 
 chrome.webNavigation.onCommitted.addListener((d) => { onNavigation(d).catch(() => {}); });
 
@@ -454,17 +535,48 @@ const handlers = {
     'cosmetic:tokens': (m, sender) => cosmeticTokens(sender.url || m.url, m.tokens),
 
     'popup:state': async ({ tabId }) => {
+        await stats.restored;
         const tab = await chrome.tabs.get(tabId).catch(() => null);
         const host = hostOf(tab?.url || '');
         const s = await settings();
-        const badge = await chrome.action.getBadgeText({ tabId }).catch(() => '');
+        const web = /^https?:/.test(tab?.url || '');
+        let hidden = 0;
+        if (web) {
+            const res = await chrome.scripting.executeScript({
+                target: { tabId, allFrames: true },
+                args: [applied.get(tabId) || []],
+                func: (specific) => {
+                    const els = new Set();
+                    for (const sel of [...specific, ...(window.__dxbApplied || [])]) {
+                        try { for (const e of document.querySelectorAll(sel)) els.add(e); } catch { /* invalid here */ }
+                        if (els.size > 9999) break;
+                    }
+                    return els.size;
+                }
+            }).catch(() => []);
+            hidden = res.reduce((n, r) => n + (r.result || 0), 0);
+        }
+        const all = await lists();
+        const on = await enabledLists();
         return {
-            host,
-            web: /^https?:/.test(tab?.url || ''),
+            host, web, hidden,
             disabled: s.disabledSites.some((x) => hostChain(host).includes(x)),
-            blocked: parseInt(badge, 10) || 0,
-            lists: (await enabledLists()).length
+            stats: stats.summary(tabId),
+            recent: stats.recent(tabId),
+            totals: await stats.totals(),
+            lists: on.length,
+            rules: on.reduce((n, l) => n + (l.filters || 0), 0),
+            listCount: all.length
         };
+    },
+    'blocked:info': (m, sender) => ({ url: blockedPages.get(sender.tab?.id) || '' }),
+    'blocked:proceed': async ({ url }) => {
+        const host = hostOf(url);
+        if (!host) return false;
+        const rules = await DNR.getSessionRules();
+        const id = rules.reduce((n, r) => Math.max(n, r.id), 0) + 1;
+        await DNR.updateSessionRules({ addRules: [{ id, priority: PRIORITY.siteDisabled, action: { type: 'allow' }, condition: { requestDomains: [host], resourceTypes: ['main_frame'] } }] });
+        return true;
     },
     'site:toggle': async ({ host, disabled }) => {
         const s = await settings();
@@ -494,7 +606,7 @@ const handlers = {
         const available = await DNR.getAvailableStaticRuleCount().catch(() => null);
         return {
             lists: all, enabled: on.map((l) => l.id), disabledSites: s.disabledSites, userFilters: s.userFilters,
-            available, version: chrome.runtime.getManifest().version
+            available, version: chrome.runtime.getManifest().version, totals: await stats.totals()
         };
     },
     'options:set-list': async ({ id, on }) => {

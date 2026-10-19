@@ -12,6 +12,16 @@ showTab(location.hash.slice(1) || 'lists');
 
 const data = await send({ type: 'options:get' });
 $('version').textContent = `v${data.version}`;
+const fmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}k` : n.toLocaleString());
+function countUp(el, to) {
+    const t0 = performance.now();
+    const step = (t) => { const p = Math.min(1, (t - t0) / 1200); el.textContent = fmt(Math.round(to * (1 - Math.pow(1 - p, 3)))); if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+}
+countUp($('t-blocked'), data.totals.blocked);
+countUp($('t-trackers'), data.totals.trackers);
+countUp($('t-popups'), data.totals.popups);
+countUp($('t-filters'), data.lists.filter((l) => data.enabled.includes(l.id)).reduce((n, l) => n + (l.filters || 0), 0));
 
 function renderLists() {
     const on = new Set(data.enabled);

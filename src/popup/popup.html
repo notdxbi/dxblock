@@ -8,28 +8,57 @@
 </head>
 <body>
   <header>
-    <span class="logo">dx<b>.</b>block</span>
-    <button id="settings" class="icon" title="Settings" aria-label="Settings">⚙</button>
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 128 128" aria-hidden="true"><path d="M64 10 L108 26 V62 C108 90 89 108 64 118 C39 108 20 90 20 62 V26 Z"/></svg>
+      <span class="logo">dx<b>.</b>block</span>
+    </div>
+    <div class="status" id="status"><i></i><span id="status-text">Live</span></div>
+    <button class="icon" id="settings" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+    </button>
   </header>
 
-  <section class="site">
-    <div class="host" id="host">—</div>
-    <div class="count"><strong id="blocked">0</strong><span class="muted"> blocked on this page</span></div>
+  <section class="scanner" id="scanner" aria-live="polite">
+    <div class="radar">
+      <div class="grid"></div>
+      <div class="sweep"></div>
+      <div class="blips" id="blips"></div>
+      <div class="core">
+        <div class="count" id="count">0</div>
+        <div class="count-label">blocked here</div>
+      </div>
+    </div>
+    <div class="host"><span id="host">—</span><span class="scan-text" id="scan-text">scanning<span class="dots"><i>.</i><i>.</i><i>.</i></span></span></div>
   </section>
 
-  <label class="power" id="power-row">
-    <div>
-      <div class="power-title" id="power-title">Protection on</div>
-      <div class="muted small" id="power-sub">Ads and trackers are blocked on this site</div>
+  <section class="stats">
+    <div class="stat ad"><b id="s-ads">0</b><span>Ads</span></div>
+    <div class="stat tracker"><b id="s-trackers">0</b><span>Trackers</span></div>
+    <div class="stat hidden"><b id="s-hidden">0</b><span>Hidden</span></div>
+    <div class="stat popup"><b id="s-popups">0</b><span>Pop-ups</span></div>
+  </section>
+
+  <section class="feed">
+    <div class="feed-head"><span><i class="live-dot"></i>Live activity</span><span class="muted" id="params"></span></div>
+    <ul id="feed"><li class="empty">Watching this page for ads and trackers…</li></ul>
+  </section>
+
+  <label class="site" id="site-row">
+    <div class="site-text">
+      <div class="site-title" id="site-title">Protection on</div>
+      <div class="muted small" id="site-sub">Blocking ads &amp; trackers on this site</div>
     </div>
     <span class="switch"><input type="checkbox" id="power"><span></span></span>
   </label>
 
   <div class="actions">
-    <button id="pick" class="primary">Block an element</button>
+    <button id="pick" class="primary">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l7.1 17 2.5-7.4L20 10.1 3 3Z"/></svg>
+      Block an element
+    </button>
   </div>
-  <p class="muted small reload" id="reload" hidden>Reload the page to apply.</p>
-  <footer class="muted small" id="lists"></footer>
+
+  <footer id="footer" class="muted"></footer>
   <script src="popup.js" type="module"></script>
 </body>
 </html>

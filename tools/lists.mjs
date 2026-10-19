@@ -2,6 +2,8 @@
 //   group: which cosmetic bundle the list feeds ("ads" or "annoyances")
 //   trusted: may use trusted-* scriptlets (only lists maintained by uBO / AdGuard)
 export const LISTS = [
+    { id: 'dxblock-fixes', cat: 'ads', name: 'dx.block fixes', desc: 'Gaps found by dx.block\'s own testing', group: 'ads', on: true, trusted: true,
+      url: 'local:tools/fixes.txt', home: 'https://github.com/notdxbi/dxblock' },
     // --- Ads ---------------------------------------------------------------
     { id: 'easylist', cat: 'ads', name: 'EasyList', desc: 'The main ad-blocking list', group: 'ads', on: true,
       url: 'https://easylist.to/easylist/easylist.txt', home: 'https://easylist.to/' },
@@ -33,12 +35,12 @@ export const LISTS = [
     { id: 'urlhaus', cat: 'security', name: 'Malicious URL blocklist', desc: 'Active malware URLs (URLhaus)', group: 'ads', on: true,
       url: 'https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-ag-online.txt', home: 'https://gitlab.com/malware-filter/urlhaus-filter' },
 
-    // --- Annoyances (off by default) ---------------------------------------
-    { id: 'ubo-cookies', cat: 'annoyances', name: 'uBlock cookie notices', desc: 'Hides cookie consent banners', group: 'annoyances', on: false, trusted: true,
+    // --- Annoyances (cookie banners + pop-up nags on; Fanboy's heavier list off) ---------------------------------------
+    { id: 'ubo-cookies', cat: 'annoyances', name: 'uBlock cookie notices', desc: 'Hides cookie consent banners', group: 'annoyances', on: true, trusted: true,
       url: 'https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt', home: 'https://github.com/uBlockOrigin/uAssets' },
-    { id: 'ubo-annoyances', cat: 'annoyances', name: 'uBlock annoyances', desc: 'Pop-ups, "open in app" banners, newsletter nags', group: 'annoyances', on: false, trusted: true,
+    { id: 'ubo-annoyances', cat: 'annoyances', name: 'uBlock annoyances', desc: 'Pop-ups, "open in app" banners, newsletter nags', group: 'annoyances', on: true, trusted: true,
       url: 'https://ublockorigin.github.io/uAssets/filters/annoyances-others.txt', home: 'https://github.com/uBlockOrigin/uAssets' },
-    { id: 'adguard-cookies', cat: 'annoyances', name: 'AdGuard cookie notices', desc: 'More cookie banners', group: 'annoyances', on: false, trusted: true,
+    { id: 'adguard-cookies', cat: 'annoyances', name: 'AdGuard cookie notices', desc: 'More cookie banners', group: 'annoyances', on: true, trusted: true,
       url: 'https://filters.adtidy.org/extension/ublock/filters/18.txt', home: 'https://github.com/AdguardTeam/AdguardFilters' },
     { id: 'fanboy-annoyance', cat: 'annoyances', name: 'Fanboy\'s Annoyance', desc: 'Social widgets, chat boxes and other clutter', group: 'annoyances', on: false,
       url: 'https://secure.fanboy.co.nz/fanboy-annoyance.txt', home: 'https://easylist.to/' }
