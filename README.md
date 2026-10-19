@@ -119,6 +119,10 @@ npm run package        # store zips
 | Service worker: blocking setup, cosmetics, pop-ups, stats, tweaks | `src/background.js`, `src/stats.js` |
 | Popup, settings, welcome page, element picker | `src/popup`, `src/options`, `src/welcome`, `src/content` |
 
+## About
+
+dx.block is an independent project by [dx.bi](https://github.com/notdxbi), built with the help of [Claude Code](https://www.anthropic.com/claude-code), Anthropic's AI coding assistant. Bug reports, filter fixes and pull requests are welcome: use the **Report** button in the popup or [open an issue](../../issues/new/choose). Questions and ideas go in [Discussions](../../discussions).
+
 ## Privacy
 
 dx.block collects nothing. No accounts, no analytics, no telemetry. See [PRIVACY.md](PRIVACY.md).
