@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to dx.block</title>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+<main>
+  <div class="hero">
+    <div class="radar"><span class="sweep"></span><span class="ring"></span><span class="ring r2"></span>
+      <svg viewBox="0 0 128 128" aria-hidden="true"><path d="M64 10 L108 26 V62 C108 90 89 108 64 118 C39 108 20 90 20 62 V26 Z"/></svg>
+    </div>
+    <p class="eyebrow">Welcome to</p>
+    <h1>dx<b>.</b>block</h1>
+    <p class="lead">Ads, trackers, pop-ups, cookie banners and dangerous pages are now blocked on every site.</p>
+  </div>
+
+  <ol class="steps">
+    <li id="step-access">
+      <span class="dot"></span>
+      <div><b>Site access</b><p class="muted" id="access-text">Checking…</p></div>
+      <button class="primary" id="grant" hidden>Allow on all sites</button>
+    </li>
+    <li id="step-lists" class="done">
+      <span class="dot"></span>
+      <div><b>Protection</b><p class="muted" id="lists-text">Loading filter lists…</p></div>
+    </li>
+    <li class="done">
+      <span class="dot"></span>
+      <div><b>Pin dx.block to your toolbar</b><p class="muted">Click the puzzle-piece icon next to the address bar and pin <b>dx.block</b> to see the live counter on every page.</p></div>
+    </li>
+  </ol>
+
+  <section class="tweaks">
+    <h2>Optional extras</h2>
+    <label class="tw"><div><b>Stop IP leaks (WebRTC)</b><span class="muted">Keeps your real IP hidden from websites, even behind a VPN.</span></div><span class="switch"><input type="checkbox" data-tweak="webrtc"><span></span></span></label>
+    <label class="tw"><div><b>Tell sites not to sell my data</b><span class="muted">Sends the Global Privacy Control opt-out signal.</span></div><span class="switch"><input type="checkbox" data-tweak="gpc"><span></span></span></label>
+    <label class="tw"><div><b>Block notification prompts</b><span class="muted">No more “Allow notifications?” pop-ups.</span></div><span class="switch"><input type="checkbox" data-tweak="notifications"><span></span></span></label>
+    <p class="muted small">Want to hide your IP completely? Set up Tor or your own proxy under <a href="../options/options.html#privacy">Settings → Privacy &amp; IP</a>.</p>
+  </section>
+
+  <div class="cta"><a class="btn" href="../options/options.html">Open settings</a><button class="primary" id="done">Start browsing</button></div>
+</main>
+<script src="welcome.js" type="module"></script>
+</body>
+</html>

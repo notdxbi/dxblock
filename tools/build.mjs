@@ -304,7 +304,6 @@ async function main() {
             return ++regex <= MAX_REGEX_PER_RULESET;
         });
         compiled.push({ list, merged });
-        rulesets.push({ id: list.id, enabled: list.on, path: `rulesets/${list.id}.json` });
         stats[list.id] = { filters: net, cosmetic: cos, rules: merged.length, skipped };
         log(`${list.id.padEnd(22)} network ${String(net).padStart(6)} -> ${String(merged.length).padStart(6)} rules · cosmetic ${String(cos).padStart(6)} · skipped ${skipped}`);
     }
@@ -316,13 +315,36 @@ async function main() {
     for (const { merged } of compiled) for (const r of merged) {
         if (rpParams(r) && Object.keys(r.condition).every((k) => k === 'resourceTypes')) rpParams(r).forEach((p) => globalParams.add(p));
     }
+    // The same rule often appears in several lists: keep only the first copy (saves rule budget)
+    const seenRules = new Set();
+    let dupes = 0;
+    for (const c of compiled) {
+        c.merged = c.merged.filter((r) => {
+            if (rpParams(r)) return true;
+            const key = JSON.stringify([r.priority, r.action, r.condition]);
+            if (seenRules.has(key)) { dupes++; return false; }
+            seenRules.add(key);
+            return true;
+        });
+        stats[c.list.id].rules = c.merged.length;
+    }
+    log(`duplicate rules removed across lists: ${dupes}`);
     for (const { list, merged } of compiled) {
         for (const r of merged) {
             const p = rpParams(r);
             if (p) r.action.redirect.transform.queryTransform.removeParams = [...new Set([...p, ...globalParams])];
         }
-        merged.forEach((r, i) => { r.id = i + 1; });
-        write(`rulesets/${list.id}.json`, JSON.stringify(merged));
+        // Store validators (Firefox AMO) can't parse JSON files over ~4 MB: split big lists into chunks
+        const chunks = chunkRules(merged);
+        const ids = [];
+        chunks.forEach((chunk, n) => {
+            const id = n ? `${list.id}~${n + 1}` : list.id;
+            chunk.forEach((r, i) => { r.id = i + 1; });
+            write(`rulesets/${id}.json`, JSON.stringify(chunk));
+            rulesets.push({ id, enabled: list.on, path: `rulesets/${id}.json` });
+            ids.push(id);
+        });
+        stats[list.id].rulesets = ids;
     }
     log(`site-wide tracking parameters stripped: ${globalParams.size}`);
 
@@ -439,7 +461,9 @@ async function main() {
     manifest.declarative_net_request = { rule_resources: rulesets };
     write('manifest.json', JSON.stringify(manifest, null, 2));
 
-    const total = rulesets.filter((r) => r.enabled).reduce((n, r) => n + stats[r.id].rules, 0);
+    buildFirefox(manifest);
+
+    const total = LISTS.filter((l) => l.on).reduce((n, l) => n + stats[l.id].rules, 0);
     log(`default-enabled network rules: ${total}`);
     log(`registered content scripts: ${registry.length}`);
     log(`built dist/ (v${PKG.version})`);
@@ -453,13 +477,94 @@ function stealthSplit(rules) {
         const c = r.condition;
         const stealth = r.action.type === 'redirect' && r.action.redirect.extensionPath
             && /\/(nooptext|noopjs|noopjson)\./.test(r.action.redirect.extensionPath)
-            && c.resourceTypes?.length === 1 && c.resourceTypes[0] === 'xmlhttprequest'
+            && (!c.resourceTypes || c.resourceTypes.includes('xmlhttprequest'))
             && !c.initiatorDomains && !c.regexFilter;
         if (!stealth) { out.push(r); continue; }
         out.push({ priority: r.priority, action: { type: 'block' }, condition: c });
         if (!c.urlFilter) out.push({ priority: r.priority + 1, action: r.action, condition: { ...c, urlFilter: '.js' } });
     }
     return out;
+}
+
+const CHUNK_BYTES = 3_500_000;
+function chunkRules(rules) {
+    // Very large domain lists in one rule (HaGeZi: 200k domains) are split first
+    const exploded = [];
+    for (const r of rules) {
+        const d = r.condition.requestDomains;
+        if (!d || d.length <= 25_000) { exploded.push(r); continue; }
+        for (let i = 0; i < d.length; i += 25_000) exploded.push({ ...r, condition: { ...r.condition, requestDomains: d.slice(i, i + 25_000) } });
+    }
+    const chunks = [[]];
+    let bytes = 0;
+    for (const r of exploded) {
+        const size = JSON.stringify(r).length + 1;
+        if (bytes + size > CHUNK_BYTES && chunks[chunks.length - 1].length) { chunks.push([]); bytes = 0; }
+        chunks[chunks.length - 1].push(r);
+        bytes += size;
+    }
+    return chunks;
+}
+
+// Firefox build (dist-firefox/): event-page background, Gecko settings, and only DNR features Firefox supports
+const FIREFOX_TYPES = new Set(['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object',
+    'xmlhttprequest', 'ping', 'csp_report', 'media', 'websocket', 'other']);
+function buildFirefox(chromeManifest) {
+    const FF = path.join(ROOT, 'dist-firefox');
+    fs.rmSync(FF, { recursive: true, force: true });
+    fs.cpSync(DIST, FF, { recursive: true });
+    const m = structuredClone(chromeManifest);
+    m.background = { scripts: ['background.js'], type: 'module' };
+    m.browser_specific_settings = { gecko: {
+        id: 'dxblock@notdxbi', strict_min_version: '128.0', data_collection_permissions: { required: ['none'] },
+        // Self-distributed, Mozilla-signed builds update from the repo (see .github/workflows/release.yml)
+        update_url: 'https://raw.githubusercontent.com/notdxbi/dxblock/main/updates/firefox.json'
+    } };
+    m.permissions = m.permissions.filter((p) => p !== 'webRequestAuthProvider').concat('webRequestBlocking');
+    for (const cs of m.content_scripts) delete cs.match_origin_as_fallback;
+    for (const w of m.web_accessible_resources) delete w.use_dynamic_url;
+    delete m.minimum_chrome_version;
+    // Firefox: 30k static rules, 5k dynamic+session rules, 20 enabled rulesets, 1k regex rules in total.
+    // The malware URL list alone is 22k rules and Firefox already has Safe Browsing, so it's off by default here;
+    // a couple of small lists move to dynamic rules if the static budget is still exceeded.
+    const lists = JSON.parse(fs.readFileSync(path.join(FF, 'data', 'lists.json'), 'utf8'));
+    const urlhaus = lists.find((l) => l.id === 'urlhaus');
+    if (urlhaus) { urlhaus.on = false; urlhaus.desc += ' (off by default in Firefox, which has Safe Browsing built in)'; }
+    const MOVABLE = ['adguard-url-tracking', 'adguard-cookies', 'ubo-badware', 'ubo-cookies'];
+    const staticTotal = () => lists.filter((l) => l.on && !l.dynamic).reduce((n, l) => n + l.rules, 0);
+    let dynamicTotal = 0;
+    for (const id of MOVABLE) {
+        if (staticTotal() <= 29_500) break;
+        const l = lists.find((x) => x.id === id);
+        if (!l?.on || dynamicTotal + l.rules > 4_000) continue;
+        l.dynamic = true;
+        dynamicTotal += l.rules;
+    }
+    for (const r of m.declarative_net_request.rule_resources) {
+        const l = lists.find((x) => (x.rulesets || [x.id]).includes(r.id));
+        r.enabled = !!l?.on && !l.dynamic;
+    }
+    const dynIds = new Set(lists.filter((l) => l.dynamic).flatMap((l) => l.rulesets));
+    m.declarative_net_request.rule_resources = m.declarative_net_request.rule_resources.filter((r) => !dynIds.has(r.id));
+    fs.writeFileSync(path.join(FF, 'data', 'lists.json'), JSON.stringify(lists));
+    log(`firefox: ${staticTotal()} static + ${dynamicTotal} dynamic rules (${[...lists.filter((l) => l.dynamic).map((l) => l.id)].join(', ')})`);
+    fs.writeFileSync(path.join(FF, 'manifest.json'), JSON.stringify(m, null, 2));
+    let regexBudget = 950;
+    for (const r of chromeManifest.declarative_net_request.rule_resources) {
+        const file = path.join(FF, r.path);
+        const rules = JSON.parse(fs.readFileSync(file, 'utf8')).filter((rule) => {
+            const c = rule.condition;
+            if (c.regexFilter && --regexBudget < 0) return false;
+            for (const k of ['resourceTypes', 'excludedResourceTypes']) {
+                if (!c[k]) continue;
+                c[k] = c[k].filter((x) => FIREFOX_TYPES.has(x));
+                if (!c[k].length) { if (k === 'resourceTypes') return false; delete c[k]; }
+            }
+            return true;
+        });
+        fs.writeFileSync(file, JSON.stringify(rules));
+    }
+    log('built dist-firefox/');
 }
 
 function copyDir(src, dst) {

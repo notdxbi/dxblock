@@ -95,3 +95,88 @@ $('save-sites').addEventListener('click', async () => {
     $('sites-status').className = 'ok';
     $('sites-status').textContent = `${clean.length} site${clean.length === 1 ? '' : 's'} allowed`;
 });
+
+// Privacy & IP
+const tw = data.tweaks;
+document.querySelectorAll('[data-tweak]').forEach((input) => {
+    input.checked = !!tw[input.dataset.tweak];
+    input.addEventListener('change', () => send({ type: 'tweaks:set', tweaks: { [input.dataset.tweak]: input.checked } }));
+});
+const PRESETS = { tor: { scheme: 'socks5', host: '127.0.0.1', port: 9050 }, torbrowser: { scheme: 'socks5', host: '127.0.0.1', port: 9150 } };
+const px = tw.proxy;
+const fill = (p) => { $('px-scheme').value = p.scheme; $('px-host').value = p.host; $('px-port').value = p.port; };
+const markPreset = () => {
+    const cur = { scheme: $('px-scheme').value, host: $('px-host').value, port: Number($('px-port').value) };
+    const match = Object.entries(PRESETS).find(([, p]) => p.scheme === cur.scheme && p.host === cur.host && p.port === cur.port)?.[0] || 'custom';
+    document.querySelectorAll('#px-preset button').forEach((b) => b.classList.toggle('on', b.dataset.p === match));
+};
+fill(px); $('px-user').value = px.user || ''; $('px-pass').value = px.pass || '';
+$('px-on').checked = px.mode !== 'off';
+$('px-form').classList.toggle('off', px.mode === 'off');
+markPreset();
+document.querySelectorAll('#px-preset button').forEach((b) => b.addEventListener('click', () => {
+    if (PRESETS[b.dataset.p]) fill(PRESETS[b.dataset.p]); else { $('px-host').focus(); }
+    markPreset();
+}));
+['px-scheme', 'px-host', 'px-port'].forEach((id) => $(id).addEventListener('input', markPreset));
+const proxyValue = (on) => ({ mode: on ? 'fixed' : 'off', scheme: $('px-scheme').value, host: $('px-host').value.trim(), port: Number($('px-port').value), user: $('px-user').value, pass: $('px-pass').value });
+async function saveProxy(on) {
+    const p = proxyValue(on);
+    if (on && (!p.host || !(p.port > 0 && p.port < 65536))) { $('ip-status').className = 'bad'; $('ip-status').textContent = 'Enter a server and port first.'; $('px-on').checked = false; return; }
+    await send({ type: 'tweaks:set', tweaks: { proxy: p } });
+    $('px-form').classList.toggle('off', !on);
+    $('ip-status').className = 'ok';
+    $('ip-status').textContent = on ? `Proxy on: ${p.scheme}://${p.host}:${p.port}` : 'Direct connection';
+}
+$('px-on').addEventListener('change', () => saveProxy($('px-on').checked));
+$('px-save').addEventListener('click', () => { $('px-on').checked = true; saveProxy(true); });
+$('ip-check').addEventListener('click', async () => {
+    $('ip-status').className = 'muted';
+    $('ip-status').textContent = 'Checking…';
+    try {
+        const r = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
+        const { ip } = await r.json();
+        $('ip-status').className = 'ok';
+        $('ip-status').textContent = `Websites see you as ${ip}${$('px-on').checked ? ' (through the proxy)' : ''}`;
+    } catch {
+        $('ip-status').className = 'bad';
+        $('ip-status').textContent = $('px-on').checked ? 'No connection through the proxy: is it running?' : 'Couldn\'t reach the IP check service.';
+    }
+});
+
+// Diagnostics
+async function diagnostics() {
+    const d = await send({ type: 'diagnostics' });
+    const lines = [
+        `dx.block ${d.version}${d.firefox ? ' (Firefox build)' : ''}`,
+        `Browser: ${d.browser}`,
+        `Site access granted: ${d.hostAccess}`,
+        `Filter lists active: ${d.rulesets} (${d.rulesetIds.join(', ')})`,
+        `Dynamic rules: ${d.dynamicRules} · session rules: ${d.sessionRules} · room for ${d.staticRuleRoom ?? '?'} more static rules`,
+        `Registered page scripts: ${d.contentScripts}`,
+        `WebRTC policy: ${d.webrtc ?? 'not available'} · proxy: ${d.proxy ?? 'not available'}`,
+        `Allowed sites: ${d.allowedSites} · my filter lines: ${d.userFilterLines}`,
+        `Blocked all-time: ${d.totals.blocked} (trackers ${d.totals.trackers}, pop-ups ${d.totals.popups})`,
+        '',
+        d.errors.length ? 'Recent errors:' : 'No errors recorded.',
+        ...d.errors.map((e) => `  ${new Date(e.t).toISOString()}  [${e.where}] ${e.message}`)
+    ];
+    $('diag-out').textContent = lines.join('\n');
+}
+$('diag-refresh').addEventListener('click', diagnostics);
+$('diag-copy').addEventListener('click', async () => {
+    await navigator.clipboard.writeText($('diag-out').textContent);
+    $('diag-status').className = 'ok'; $('diag-status').textContent = 'Copied';
+});
+window.addEventListener('hashchange', () => { if (location.hash === '#diag') diagnostics(); });
+if (location.hash === '#diag') diagnostics();
+
+// Updates
+$('update-now').addEventListener('click', async () => {
+    $('update-status').className = 'muted'; $('update-status').textContent = 'Checking…';
+    const u = await send({ type: 'update:check' });
+    $('update-status').className = u ? 'ok' : 'muted';
+    $('update-status').innerHTML = '';
+    if (u) { const a = Object.assign(document.createElement('a'), { href: u.url, target: '_blank', rel: 'noopener', textContent: `Version ${u.version} is available: download` }); $('update-status').append(a); }
+    else $('update-status').textContent = `You're up to date (v${data.version}).`;
+});

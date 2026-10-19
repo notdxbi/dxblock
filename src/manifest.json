@@ -33,7 +33,11 @@
     "scripting",
     "storage",
     "webNavigation",
-    "contextMenus"
+    "contextMenus",
+    "privacy",
+    "proxy",
+    "webRequestAuthProvider",
+    "alarms"
   ],
   "host_permissions": [
     "<all_urls>"

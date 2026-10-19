@@ -2,9 +2,14 @@
 
 dx.block does not collect, store, sell or transmit any personal data.
 
-- **No accounts, no analytics, no telemetry.** The extension never contacts any server of its own.
-- **Your settings stay on your device.** Enabled lists, your custom filters and your allowed sites are saved in the browser's local extension storage and are never uploaded.
-- **Page access is used only to block and hide ads.** dx.block needs access to all sites so it can block ad requests and hide ad elements. Page content and browsing history are processed locally, in your browser, and are never recorded or sent anywhere.
-- **Filter lists are bundled.** They're downloaded when the extension is *built*, not by the installed extension.
+- **No accounts, no analytics, no telemetry.** dx.block has no servers and never reports on you.
+- **Everything stays on your device.** Settings, custom filters, allowed sites and statistics are kept in the browser's local extension storage.
+- **Page access is only used to block and hide ads.** Pages and requests are processed locally and never recorded or sent anywhere.
+- **Filter lists are bundled** into each release; the installed extension doesn't download them.
 
-Questions: open an issue on the project's GitHub page.
+The only network requests dx.block itself makes:
+- **Update check** (can be switched off in Settings → About): once a day it asks the public GitHub API for the latest dx.block release version. No identifiers are sent.
+- **"Check my IP"** (only when you click it): one request to `api.ipify.org` to show the IP address websites see.
+- **Proxy** (only if you configure one): your browsing goes through the proxy server *you* entered.
+
+Questions: open an issue at https://github.com/notdxbi/dxblock/issues

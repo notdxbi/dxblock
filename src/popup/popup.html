@@ -38,9 +38,20 @@
     <div class="stat popup"><b id="s-popups">0</b><span>Pop-ups</span></div>
   </section>
 
+  <a class="update" id="update" hidden target="_blank" rel="noopener"><b>Update available</b><span id="update-v"></span><i>Get it →</i></a>
+
+  <div class="access" id="access" hidden>
+    <span>dx.block needs permission to work on websites.</span>
+    <button class="primary" id="grant">Allow</button>
+  </div>
+
   <section class="feed">
-    <div class="feed-head"><span><i class="live-dot"></i>Live activity</span><span class="muted" id="params"></span></div>
+    <div class="feed-head">
+      <span class="tabs"><button class="ftab on" data-view="live"><i class="live-dot"></i>Live</button><button class="ftab" data-view="top">Top blocked</button></span>
+      <span class="muted" id="params"></span>
+    </div>
     <ul id="feed"><li class="empty">Watching this page for ads and trackers…</li></ul>
+    <ul id="top" hidden></ul>
   </section>
 
   <label class="site" id="site-row">
@@ -48,7 +59,7 @@
       <div class="site-title" id="site-title">Protection on</div>
       <div class="muted small" id="site-sub">Blocking ads &amp; trackers on this site</div>
     </div>
-    <span class="switch"><input type="checkbox" id="power"><span></span></span>
+    <span class="switch"><input type="checkbox" id="power" checked><span></span></span>
   </label>
 
   <div class="actions">

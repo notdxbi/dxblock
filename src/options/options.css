@@ -43,3 +43,20 @@ code { font: 12.5px ui-monospace, monospace; background: rgba(255,255,255,.07); 
 .ok { color: var(--ok); }
 .bad { color: var(--accent-2); }
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 14px; margin-top: 8px; }
+.row-head { display: flex; gap: 14px; align-items: center; }
+.row-head > div:first-child { flex: 1; }
+.card .name { font-weight: 650; }
+.card .meta { font-size: 12px; color: var(--muted); }
+.px-form { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.px-form.off { opacity: .45; pointer-events: none; }
+.seg { display: inline-flex; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 11px; padding: 3px; gap: 3px; flex-wrap: wrap; }
+.seg button { background: transparent; color: var(--muted); padding: 6px 12px; font-size: 13px; }
+.seg button.on { background: rgba(229,9,20,.18); color: #fff; box-shadow: inset 0 0 0 1px rgba(229,9,20,.4); }
+.fields { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.fields label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; min-width: 110px; }
+.fields label.grow { flex: 1; min-width: 160px; }
+.fields input, .fields select { background: var(--panel-solid); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; font: 14px system-ui, sans-serif; }
+.fields input:focus, .fields select:focus { outline: none; border-color: rgba(229,9,20,.6); box-shadow: 0 0 0 3px rgba(229,9,20,.15); }
+.diag { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 13px; padding: 14px; font: 12.5px/1.55 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto; }

@@ -12,9 +12,11 @@
     <span class="logo">dx<b>.</b>block</span>
     <nav>
       <a href="#lists" class="on">Filter lists</a>
+      <a href="#privacy">Privacy &amp; IP</a>
       <a href="#filters">My filters</a>
       <a href="#sites">Allowed sites</a>
       <a href="#about">About</a>
+      <a href="#diag">Diagnostics</a>
     </nav>
   </header>
 
@@ -33,6 +35,44 @@
     <p class="muted">The same community lists that power uBlock Origin, AdGuard and Adblock Plus, compiled into Chrome's native, fast blocking engine. Lists update with each extension release.</p>
     <div id="list-groups"></div>
     <p class="muted small" id="capacity"></p>
+  </section>
+
+  <section id="privacy" class="tab" hidden>
+    <h1>Privacy &amp; IP</h1>
+    <p class="muted">Extra protection on top of ad blocking. Changes apply instantly.</p>
+
+    <div class="group"><h2>Hide your IP address</h2>
+      <div class="card proxy">
+        <div class="row-head">
+          <div><div class="name">Route browsing through a proxy</div>
+          <div class="meta">Websites see the proxy's IP instead of yours. dx.block doesn't run servers itself: use <b>Tor</b> (free, run Tor or Tor Browser on this computer) or the SOCKS5/HTTP details from your VPN or proxy provider.</div></div>
+          <span class="switch"><input type="checkbox" id="px-on"><span></span></span>
+        </div>
+        <div class="px-form" id="px-form">
+          <div class="seg" id="px-preset">
+            <button data-p="tor">Tor (port 9050)</button><button data-p="torbrowser">Tor Browser (9150)</button><button data-p="custom">My own proxy</button>
+          </div>
+          <div class="fields">
+            <label>Type<select id="px-scheme"><option value="socks5">SOCKS5</option><option value="socks4">SOCKS4</option><option value="http">HTTP</option><option value="https">HTTPS</option></select></label>
+            <label class="grow">Server<input id="px-host" placeholder="127.0.0.1" spellcheck="false"></label>
+            <label>Port<input id="px-port" type="number" min="1" max="65535" placeholder="9050"></label>
+          </div>
+          <div class="fields">
+            <label class="grow">Username <span class="muted">(optional)</span><input id="px-user" autocomplete="off" spellcheck="false"></label>
+            <label class="grow">Password <span class="muted">(optional)</span><input id="px-pass" type="password" autocomplete="off"></label>
+          </div>
+          <div class="bar"><button class="primary" id="px-save">Save proxy</button><button id="ip-check">Check my IP</button><span id="ip-status" class="muted"></span></div>
+          <p class="muted small">Tip: if pages stop loading, the proxy isn't running. Switch it off here to go back to a direct connection.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="group"><h2>Protection tweaks</h2>
+      <label class="list"><div class="info"><div class="name">Stop IP leaks (WebRTC)</div><div class="meta">Stops websites from discovering your real and local IP through WebRTC, even behind a VPN or proxy. Video calls still work.</div></div><span class="switch"><input type="checkbox" data-tweak="webrtc"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Tell sites not to sell or share my data</div><div class="meta">Sends the Global Privacy Control and Do Not Track signals. GPC is a legal opt-out in California and recognised under GDPR.</div></div><span class="switch"><input type="checkbox" data-tweak="gpc"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Hide where you came from</div><div class="meta">Removes the referrer from requests to other companies' servers, so trackers and CDNs don't learn which page you were on. Rarely, an image host may refuse to load.</div></div><span class="switch"><input type="checkbox" data-tweak="referrer"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Block "Allow notifications?" prompts</div><div class="meta">Websites can't ask to send you push notifications. Sites you already allowed keep working.</div></div><span class="switch"><input type="checkbox" data-tweak="notifications"><span></span></span></label>
+    </div>
   </section>
 
   <section id="filters" class="tab" hidden>
@@ -69,6 +109,8 @@ example.com##+js(set-constant, adsEnabled, false)
     <h1>About</h1>
     <p><span class="logo">dx<b>.</b>block</span> <span class="muted" id="version"></span></p>
     <p>An open-source ad blocker for Brave, Chrome and other Chromium browsers. Free software under the GNU GPL v3.</p>
+    <label class="list"><div class="info"><div class="name">Check for updates</div><div class="meta" id="update-meta">Once a day, asks GitHub whether a newer dx.block exists (no personal data is sent). Store installs update automatically anyway.</div></div><span class="switch"><input type="checkbox" data-tweak="updateCheck"><span></span></span></label>
+    <div class="bar"><button id="update-now">Check now</button><span id="update-status" class="muted"></span></div>
     <h2>Keyboard &amp; menus</h2>
     <p class="muted">Right-click any page → <b>Block element…</b>, or set a shortcut for “Block an element” at <code>brave://extensions/shortcuts</code>.</p>
     <h2>Credits</h2>
@@ -80,6 +122,13 @@ example.com##+js(set-constant, adsEnabled, false)
       <li><a href="https://gitlab.com/malware-filter/urlhaus-filter" target="_blank" rel="noopener">Malicious URL Blocklist</a>: curbengh, based on URLhaus by abuse.ch (CC0 / MIT)</li>
       <li><a href="https://secure.fanboy.co.nz/" target="_blank" rel="noopener">Fanboy's lists</a>: Fanboy (CC BY 3.0)</li>
     </ul>
+  </section>
+
+  <section id="diag" class="tab" hidden>
+    <h1>Diagnostics</h1>
+    <p class="muted">If something isn't working, copy this report into your bug report. It contains no browsing history.</p>
+    <pre id="diag-out" class="diag">Loading…</pre>
+    <div class="bar"><button class="primary" id="diag-copy">Copy report</button><button id="diag-refresh">Refresh</button><span id="diag-status" class="muted"></span></div>
   </section>
 </div>
 <script src="options.js" type="module"></script>

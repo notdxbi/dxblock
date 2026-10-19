@@ -12,3 +12,7 @@ adblock.turtlecute.org##.banner-ads.ad-unit
 ! TikTok's ad platform as a third-party resource (uBO only blocks requests to its root path)
 ||ads.tiktok.com^$third-party
 ||ads-sg.tiktok.com^$third-party
+!
+! Connatix video-ad players (uBO's unbreak list allows them so embedded players keep working; ads come first here)
+||vid.connatix.com^$third-party,important
+||cd.connatix.com^$third-party,important

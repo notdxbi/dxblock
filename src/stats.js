@@ -18,7 +18,7 @@ export function kindOf(url) {
 }
 
 const hostOf = (url) => { try { return new URL(url).hostname; } catch { return ''; } };
-const fresh = (url) => ({ host: hostOf(url), blocked: 0, ads: 0, trackers: 0, threats: 0, stealth: 0, params: 0, popups: 0, recent: [], since: Date.now() });
+const fresh = (url) => ({ host: hostOf(url), blocked: 0, ads: 0, trackers: 0, threats: 0, stealth: 0, params: 0, popups: 0, recent: [], hosts: {}, since: Date.now() });
 
 export function getTab(tabId) {
     let s = tabs.get(tabId);
@@ -53,18 +53,22 @@ export function record(tabId, kind, url) {
         else s.ads++;
     }
     if (kind !== 'param') pendingTotals.blocked++;
+    if (kind !== 'param') { s.hosts ||= {}; s.hosts[host] = (s.hosts[host] || 0) + 1; }
     const ev = { kind, host, t: Date.now() };
     s.recent.unshift(ev);
     if (s.recent.length > 60) s.recent.length = 60;
     updateBadge(tabId);
-    broadcast(tabId, { type: 'event', ev, stats: summary(tabId) });
+    broadcast(tabId, { type: 'event', ev, stats: summary(tabId), top: topHosts(tabId, 4) });
     scheduleSave();
     scheduleTotals();
 }
 
 export function summary(tabId) {
-    const { recent, ...rest } = getTab(tabId);
+    const { recent, hosts, ...rest } = getTab(tabId);
     return rest;
+}
+export function topHosts(tabId, n) {
+    return Object.entries(getTab(tabId).hosts || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
 }
 export function recent(tabId) {
     return getTab(tabId).recent;
@@ -119,7 +123,7 @@ function scheduleSave() {
     saveTimer = setTimeout(() => {
         saveTimer = 0;
         const obj = {};
-        for (const [id, s] of tabs) obj[id] = { ...s, recent: s.recent.slice(0, 30) };
+        for (const [id, s] of tabs) obj[id] = { ...s, recent: s.recent.slice(0, 30), hosts: Object.fromEntries(Object.entries(s.hosts || {}).sort((a, b) => b[1] - a[1]).slice(0, 40)) };
         chrome.storage.session.set({ tabStats: obj }).catch(() => {});
     }, 1000);
 }

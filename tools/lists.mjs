@@ -26,6 +26,8 @@ export const LISTS = [
     { id: 'adguard-url-tracking', cat: 'privacy', name: 'AdGuard URL tracking', desc: 'Strips tracking parameters (fbclid, gclid, mc_eid, ...) from links', group: 'ads', on: true, trusted: true,
       url: 'https://filters.adtidy.org/extension/ublock/filters/17.txt', home: 'https://github.com/AdguardTeam/AdguardFilters' },
 
+    { id: 'dxblock-strict', cat: 'privacy', name: 'dx.block strict', desc: 'Social SDKs, chat & push widgets, marketing and product analytics other lists allow. Turn off if a Facebook login, support chat or embed breaks', group: 'ads', on: true, trusted: true,
+      url: 'local:tools/strict.txt', home: 'https://github.com/notdxbi/dxblock' },
     { id: 'hagezi-pro', cat: 'privacy', name: 'HaGeZi Multi PRO', desc: 'DNS-style blocklist: ads, trackers, telemetry, phishing (catches app/phone trackers EasyList misses)', group: 'ads', on: true,
       url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt', home: 'https://github.com/hagezi/dns-blocklists' },
 

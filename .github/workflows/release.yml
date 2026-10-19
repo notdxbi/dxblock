@@ -1,8 +1,10 @@
-# Weekly: download fresh filter lists, build, test in Chromium, publish a release zip.
+# Every Monday: fresh filter lists -> build -> install test -> release.
+# Firefox builds are signed by Mozilla and published for auto-update when the repo has the secrets
+# AMO_JWT_ISSUER and AMO_JWT_SECRET (free API keys: https://addons.mozilla.org/developers/addon/api/key/).
 name: Build & release
 on:
   schedule:
-    - cron: '17 4 * * 1'      # Mondays 04:17 UTC
+    - cron: '17 4 * * 1'
   workflow_dispatch:
   push:
     tags: ['v*']
@@ -11,8 +13,11 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
+    env:
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,18 +26,51 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+
       - name: Version
         id: v
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; else V="$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')").${GITHUB_RUN_NUMBER}"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"
+          else V="$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')").${GITHUB_RUN_NUMBER}"; fi
           npm pkg set version="$V"
           echo "version=$V" >> "$GITHUB_OUTPUT"
-      - run: npm run build
-      - run: npm test
+
+      - name: Build (downloads the latest filter lists)
+        run: npm run build
+      - name: Install test (Chromium)
+        run: node tools/test.mjs --quick
+      - name: Validate Firefox build
+        run: npx web-ext lint --source-dir dist-firefox
       - run: npm run package
-      - uses: softprops/action-gh-release@v2
+
+      - name: Sign Firefox build
+        if: env.AMO_JWT_ISSUER != ''
+        run: |
+          npx web-ext sign --channel unlisted --source-dir dist-firefox --artifacts-dir signed \
+            --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
+          mv signed/*.xpi "dxblock-${{ steps.v.outputs.version }}-firefox.xpi"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.v.outputs.version }}
           name: dx.block ${{ steps.v.outputs.version }}
-          body: Filter lists refreshed on ${{ github.event.repository.updated_at }}. Upload the zip to the Chrome Web Store, or load it unpacked.
-          files: dxblock-${{ steps.v.outputs.version }}.zip
+          body: |
+            Weekly build with freshly downloaded filter lists.
+
+            **Chrome · Brave · Edge · Opera · Vivaldi:** download `dxblock-${{ steps.v.outputs.version }}-chromium.zip`, unzip, then *Load unpacked* (see the README).
+            **Firefox:** install `dxblock-${{ steps.v.outputs.version }}-firefox.xpi` if present (signed, updates itself), otherwise the `-firefox.zip` as a temporary add-on.
+          files: |
+            dxblock-${{ steps.v.outputs.version }}-chromium.zip
+            dxblock-${{ steps.v.outputs.version }}-firefox.zip
+            dxblock-${{ steps.v.outputs.version }}-firefox.xpi
+          fail_on_unmatched_files: false
+
+      - name: Point Firefox auto-update at the new build
+        if: env.AMO_JWT_ISSUER != ''
+        run: |
+          node tools/firefox-update.mjs "${{ steps.v.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/firefox.json
+          git commit -m "Firefox update manifest: ${{ steps.v.outputs.version }}" && git push origin HEAD:main || true

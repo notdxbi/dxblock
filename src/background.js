@@ -6,7 +6,19 @@ import { S as SCRIPTLETS, ALIASES, VERSION as SCRIPTLETS_VERSION } from './lib/s
 import * as stats from './stats.js';
 
 const DNR = chrome.declarativeNetRequest;
+const IS_FIREFOX = typeof browser !== 'undefined' && typeof browser.runtime?.getBrowserInfo === 'function';
+
+// Keep the last few errors for the Diagnostics page
+const errors = [];
+const logError = (where, err) => {
+    errors.unshift({ where, message: String(err?.message || err), t: Date.now() });
+    errors.length = Math.min(errors.length, 20);
+};
+self.addEventListener('error', (e) => logError('worker', e.message));
+self.addEventListener('unhandledrejection', (e) => logError('promise', e.reason));
 const USER_RULE_BASE = 10_000;
+const TWEAK_RULE_BASE = 9_000;
+const DYNAMIC_LIST_BASE = 100_000;
 const SITE_RULE_BASE = 1;
 
 // ---------------------------------------------------------------------------
@@ -51,10 +63,19 @@ async function getPopupFilters() {
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
-const DEFAULTS = { lists: {}, disabledSites: [], userFilters: '' };
+const REPO = 'notdxbi/dxblock';
+const TWEAK_DEFAULTS = {
+    updateCheck: true,       // daily check of GitHub releases for a newer version
+    webrtc: true,            // stop WebRTC from revealing your real IP
+    gpc: true,               // send Global Privacy Control / Do Not Track
+    referrer: false,         // strip the Referer header on third-party requests
+    notifications: false,    // auto-deny "Allow notifications?" prompts
+    proxy: { mode: 'off', scheme: 'socks5', host: '127.0.0.1', port: 9050, user: '', pass: '' }
+};
+const DEFAULTS = { lists: {}, disabledSites: [], userFilters: '', tweaks: TWEAK_DEFAULTS };
 async function settings() {
     const s = await chrome.storage.local.get(DEFAULTS);
-    return { ...DEFAULTS, ...s };
+    return { ...DEFAULTS, ...s, tweaks: { ...TWEAK_DEFAULTS, ...s.tweaks, proxy: { ...TWEAK_DEFAULTS.proxy, ...(s.tweaks?.proxy || {}) } } };
 }
 
 async function enabledLists() {
@@ -181,8 +202,9 @@ async function syncRulesets() {
     const [all, on] = await Promise.all([lists(), enabledLists()]);
     const onIds = new Set(on.map((l) => l.id));
     const current = new Set(await DNR.getEnabledRulesets());
-    const enableRulesetIds = all.filter((l) => onIds.has(l.id) && !current.has(l.id)).map((l) => l.id);
-    const disableRulesetIds = all.filter((l) => !onIds.has(l.id) && current.has(l.id)).map((l) => l.id);
+    const rs = (l) => (l.dynamic ? [] : l.rulesets || [l.id]);   // a big list ships as several ruleset files
+    const enableRulesetIds = all.filter((l) => onIds.has(l.id)).flatMap(rs).filter((id) => !current.has(id));
+    const disableRulesetIds = all.filter((l) => !onIds.has(l.id)).flatMap(rs).filter((id) => current.has(id));
     if (enableRulesetIds.length || disableRulesetIds.length) {
         await DNR.updateEnabledRulesets({ enableRulesetIds, disableRulesetIds });
     }
@@ -197,14 +219,32 @@ async function syncDynamicRules() {
         action: { type: 'allowAllRequests' },
         condition: { requestDomains: [host], resourceTypes: ['main_frame', 'sub_frame'] }
     }));
+    const tw = s.tweaks;
+    const ALL_TYPES = ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'media', 'websocket', 'other'];
+    if (tw.gpc) add.push({
+        id: TWEAK_RULE_BASE, priority: 1,
+        action: { type: 'modifyHeaders', requestHeaders: [{ header: 'Sec-GPC', operation: 'set', value: '1' }, { header: 'DNT', operation: 'set', value: '1' }] },
+        condition: { resourceTypes: ALL_TYPES }
+    });
+    if (tw.referrer) add.push({
+        id: TWEAK_RULE_BASE + 1, priority: 1,
+        action: { type: 'modifyHeaders', requestHeaders: [{ header: 'Referer', operation: 'remove' }] },
+        condition: { domainType: 'thirdParty', resourceTypes: ALL_TYPES.filter((x) => x !== 'main_frame') }
+    });
     user.rules.forEach((r, i) => add.push({ ...r, id: USER_RULE_BASE + i }));
+    // Lists the Firefox build loads as dynamic rules (Firefox's static budget is 30k)
+    let next = DYNAMIC_LIST_BASE;
+    for (const l of await enabledLists()) {
+        if (!l.dynamic) continue;
+        for (const id of l.rulesets || [l.id]) for (const r of await json(`rulesets/${id}.json`)) add.push({ ...r, id: next++ });
+    }
     const existing = (await DNR.getDynamicRules()).map((r) => r.id);
     try {
         await DNR.updateDynamicRules({ removeRuleIds: existing, addRules: add });
     } catch (err) {
         // A bad user rule shouldn't take the site allowlist down with it
         console.warn('dx.block: dynamic rules rejected, retrying without user filters', err);
-        await DNR.updateDynamicRules({ removeRuleIds: existing, addRules: add.filter((r) => r.id < USER_RULE_BASE) });
+        await DNR.updateDynamicRules({ removeRuleIds: existing, addRules: add.filter((r) => r.id < USER_RULE_BASE || r.id >= DYNAMIC_LIST_BASE) }).catch((e2) => logError('dynamic rules', e2));
         return String(err.message || err);
     }
     return null;
@@ -234,7 +274,7 @@ async function syncContentScripts({ force = false } = {}) {
         excludeMatches,
         runAt: 'document_start',
         allFrames: true,
-        matchOriginAsFallback: true,
+        ...(IS_FIREFOX ? {} : { matchOriginAsFallback: true }),
         world: r.world,
         persistAcrossSessions: true
     }));
@@ -248,16 +288,105 @@ async function syncContentScripts({ force = false } = {}) {
     await chrome.storage.local.set({ scriptStamp: stamp });
 }
 
+// ---------------------------------------------------------------------------
+// Update check (installs from the browser stores update themselves; this covers zip / unpacked installs)
+// ---------------------------------------------------------------------------
+const newer = (a, b) => {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+    return false;
+};
+async function checkForUpdate() {
+    const { tweaks } = await settings();
+    if (!tweaks.updateCheck) { await chrome.storage.local.remove('update'); return null; }
+    try {
+        const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { accept: 'application/vnd.github+json' }, cache: 'no-store' });
+        if (!r.ok) return null;
+        const rel = await r.json();
+        const version = String(rel.tag_name || '').replace(/^v/, '');
+        const current = chrome.runtime.getManifest().version;
+        const update = version && newer(version, current) ? { version, url: rel.html_url, at: Date.now() } : null;
+        if (update) await chrome.storage.local.set({ update }); else await chrome.storage.local.remove('update');
+        return update;
+    } catch (e) { logError('update check', e); return null; }
+}
+chrome.alarms?.onAlarm.addListener((a) => { if (a.name === 'update-check') checkForUpdate(); });
+chrome.alarms?.create('update-check', { delayInMinutes: 2, periodInMinutes: 24 * 60 });
+
+// ---------------------------------------------------------------------------
+// Privacy tweaks
+// ---------------------------------------------------------------------------
+const TWEAK_SCRIPTS = { gpc: 'content/gpc.js', notifications: 'content/no-notifications.js' };
+let proxyListener = null;
+let proxyAuth = null;
+
+async function applyTweaks() {
+    const { tweaks: tw, disabledSites } = await settings();
+    // WebRTC IP leak protection
+    try {
+        await chrome.privacy?.network?.webRTCIPHandlingPolicy?.set({ value: tw.webrtc ? 'disable_non_proxied_udp' : 'default' });
+    } catch (e) { logError('webrtc', e); }
+
+    // Page-side scripts (GPC flag, notification blocker)
+    const existing = (await chrome.scripting.getRegisteredContentScripts()).filter((r) => r.id.startsWith('dxbt-')).map((r) => r.id);
+    if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing }).catch(() => {});
+    const wanted = Object.entries(TWEAK_SCRIPTS).filter(([k]) => tw[k]).map(([k, file]) => ({
+        id: `dxbt-${k}`, js: [file], matches: ['<all_urls>'], excludeMatches: disabledSites.flatMap(sitePatterns),
+        runAt: 'document_start', allFrames: true, world: 'MAIN', persistAcrossSessions: true
+    }));
+    if (wanted.length) await chrome.scripting.registerContentScripts(wanted).catch((e) => logError('tweak scripts', e));
+
+    await applyProxy(tw.proxy);
+}
+
+async function applyProxy(p) {
+    const on = p.mode !== 'off' && p.host && p.port;
+    proxyAuth = on && p.user ? { username: p.user, password: p.pass || '' } : null;
+    if (IS_FIREFOX) {
+        // Firefox: decide per request
+        if (proxyListener) { browser.proxy.onRequest.removeListener(proxyListener); proxyListener = null; }
+        if (on) {
+            const type = p.scheme === 'socks5' ? 'socks' : p.scheme === 'socks4' ? 'socks4' : p.scheme;
+            proxyListener = () => ({ type, host: p.host, port: Number(p.port), proxyDNS: type.startsWith('socks'), ...(proxyAuth || {}) });
+            browser.proxy.onRequest.addListener(proxyListener, { urls: ['<all_urls>'] });
+        }
+        return;
+    }
+    if (!chrome.proxy?.settings) return;
+    try {
+        if (on) {
+            await chrome.proxy.settings.set({
+                scope: 'regular',
+                value: { mode: 'fixed_servers', rules: { singleProxy: { scheme: p.scheme, host: p.host, port: Number(p.port) }, bypassList: ['localhost', '127.0.0.1', '[::1]', '<local>'] } }
+            });
+        } else {
+            const cur = await chrome.proxy.settings.get({});
+            if (cur.levelOfControl === 'controlled_by_this_extension') await chrome.proxy.settings.clear({ scope: 'regular' });
+        }
+    } catch (e) { logError('proxy', e); }
+}
+
+// Proxy username/password
+chrome.webRequest.onAuthRequired?.addListener((d, done) => {
+    if (d.isProxy && proxyAuth) { done?.({ authCredentials: proxyAuth }); return { authCredentials: proxyAuth }; }
+    done?.({});
+    return {};
+}, { urls: ['<all_urls>'] }, [IS_FIREFOX ? 'blocking' : 'asyncBlocking']);
+
 async function syncAll(force = false) {
     await ensureRedirects();
-    await syncRulesets().catch((e) => console.warn('dx.block: rulesets', e));
-    await syncDynamicRules().catch((e) => console.warn('dx.block: dynamic rules', e));
-    await syncContentScripts({ force }).catch((e) => console.warn('dx.block: content scripts', e));
-    await DNR.setExtensionActionOptions({ displayActionCountAsBadgeText: false }).catch(() => {});
+    await syncRulesets().catch((e) => logError('rulesets', e));
+    await syncDynamicRules().catch((e) => logError('dynamic rules', e));
+    await syncContentScripts({ force }).catch((e) => logError('content scripts', e));
+    await DNR.setExtensionActionOptions?.({ displayActionCountAsBadgeText: false })?.catch(() => {});
     await chrome.action.setBadgeBackgroundColor({ color: '#e50914' }).catch(() => {});
     await chrome.action.setBadgeTextColor?.({ color: '#ffffff' }).catch?.(() => {});
+    await applyTweaks().catch((e) => logError('tweaks', e));
     await chrome.storage.session.set({ ready: Date.now() });
 }
+// The proxy listener (Firefox) and auth cache live in memory: restore them whenever the worker starts
+settings().then((s) => applyProxy(s.tweaks.proxy)).catch(() => {});
 
 // ---------------------------------------------------------------------------
 // Cosmetics for a frame
@@ -471,8 +600,13 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (d) => {
 const EXT_ORIGIN = chrome.runtime.getURL('');
 const blockedPages = new Map();   // tabId -> URL shown on the warning page
 
+const seenErrors = {};   // error string -> count (Diagnostics)
+const BLOCKED_ERRORS = new Set(['net::ERR_BLOCKED_BY_CLIENT', 'NS_ERROR_BLOCKED_BY_POLICY', 'NS_ERROR_CONTENT_BLOCKED']);
 chrome.webRequest.onErrorOccurred.addListener((d) => {
-    if (d.error !== 'net::ERR_BLOCKED_BY_CLIENT' || d.tabId < 0) return;
+    seenErrors[d.error] = (seenErrors[d.error] || 0) + 1;
+    if (d.tabId < 0) return;
+    if (d.error === 'NS_ERROR_ABORT' && IS_FIREFOX) { firefoxBlocked(d); return; }
+    if (!BLOCKED_ERRORS.has(d.error)) return;
     if (d.type === 'main_frame') {
         blockedPages.set(d.tabId, d.url);
         stats.record(d.tabId, 'threat', d.url);
@@ -481,6 +615,17 @@ chrome.webRequest.onErrorOccurred.addListener((d) => {
     }
     stats.record(d.tabId, stats.kindOf(d.url), d.url);
 }, { urls: ['<all_urls>'] });
+
+// Firefox reports DNR blocks as NS_ERROR_ABORT, like any cancelled request: confirm with DNR before counting
+const FF_TYPES = { beacon: 'ping', imageset: 'image', object_subrequest: 'object', xml_dtd: 'other', xslt: 'other', web_manifest: 'other', speculative: 'other' };
+async function firefoxBlocked(d) {
+    try {
+        const r = await DNR.testMatchOutcome({ url: d.url, type: FF_TYPES[d.type] || d.type, initiator: d.originUrl || d.documentUrl, tabId: d.tabId });
+        if (!r.matchedRules?.length) return;
+    } catch { /* testMatchOutcome unavailable: count it */ }
+    if (d.type === 'main_frame') return;
+    stats.record(d.tabId, stats.kindOf(d.url), d.url);
+}
 
 chrome.webRequest.onBeforeRedirect.addListener((d) => {
     if (d.tabId < 0) return;
@@ -534,40 +679,48 @@ const handlers = {
     'cosmetic:init': (m, sender) => cosmeticInit(sender.url || m.url, sender.tab?.url || ''),
     'cosmetic:tokens': (m, sender) => cosmeticTokens(sender.url || m.url, m.tokens),
 
+    // Must answer instantly (the popup renders from it), so nothing here waits on the page
     'popup:state': async ({ tabId }) => {
         await stats.restored;
         const tab = await chrome.tabs.get(tabId).catch(() => null);
-        const host = hostOf(tab?.url || '');
-        const s = await settings();
-        const web = /^https?:/.test(tab?.url || '');
-        let hidden = 0;
-        if (web) {
-            const res = await chrome.scripting.executeScript({
-                target: { tabId, allFrames: true },
-                args: [applied.get(tabId) || []],
-                func: (specific) => {
-                    const els = new Set();
-                    for (const sel of [...specific, ...(window.__dxbApplied || [])]) {
-                        try { for (const e of document.querySelectorAll(sel)) els.add(e); } catch { /* invalid here */ }
-                        if (els.size > 9999) break;
-                    }
-                    return els.size;
-                }
-            }).catch(() => []);
-            hidden = res.reduce((n, r) => n + (r.result || 0), 0);
-        }
-        const all = await lists();
-        const on = await enabledLists();
+        const url = tab?.url || tab?.pendingUrl || '';
+        const host = hostOf(url);
+        const [s, on, hasAccess] = await Promise.all([
+            settings(), enabledLists(),
+            chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] }).catch(() => true)
+        ]);
         return {
-            host, web, hidden,
+            host,
+            web: /^https?:/.test(url),
+            hasAccess,
             disabled: s.disabledSites.some((x) => hostChain(host).includes(x)),
             stats: stats.summary(tabId),
             recent: stats.recent(tabId),
+            top: stats.topHosts(tabId, 4),
             totals: await stats.totals(),
             lists: on.length,
             rules: on.reduce((n, l) => n + (l.filters || 0), 0),
-            listCount: all.length
+            tweaks: s.tweaks,
+            update: (await chrome.storage.local.get('update')).update || null
         };
+    },
+    'update:check': () => checkForUpdate(),
+    // Elements hidden on the page: injected immediately (doesn't wait for the page to finish loading)
+    'popup:hidden': async ({ tabId }) => {
+        const count = chrome.scripting.executeScript({
+            target: { tabId, allFrames: true },
+            injectImmediately: true,
+            args: [applied.get(tabId) || []],
+            func: (specific) => {
+                const els = new Set();
+                for (const sel of [...specific, ...(window.__dxbApplied || [])]) {
+                    try { for (const e of document.querySelectorAll(sel)) els.add(e); } catch { /* invalid here */ }
+                    if (els.size > 9999) break;
+                }
+                return els.size;
+            }
+        }).then((res) => res.reduce((n, r) => n + (r.result || 0), 0)).catch(() => null);
+        return Promise.race([count, new Promise((r) => setTimeout(() => r(null), 700))]);
     },
     'blocked:info': (m, sender) => ({ url: blockedPages.get(sender.tab?.id) || '' }),
     'blocked:proceed': async ({ url }) => {
@@ -586,6 +739,7 @@ const handlers = {
         await chrome.storage.local.set({ disabledSites: [...new Set(sites)] });
         await syncDynamicRules();
         await syncContentScripts();
+        await applyTweaks();
         return true;
     },
     'picker:start': ({ tabId }) => startPicker(tabId),
@@ -606,15 +760,16 @@ const handlers = {
         const available = await DNR.getAvailableStaticRuleCount().catch(() => null);
         return {
             lists: all, enabled: on.map((l) => l.id), disabledSites: s.disabledSites, userFilters: s.userFilters,
-            available, version: chrome.runtime.getManifest().version, totals: await stats.totals()
+            available, version: chrome.runtime.getManifest().version, totals: await stats.totals(), tweaks: s.tweaks
         };
     },
     'options:set-list': async ({ id, on }) => {
-        const s = await settings();
+        const [s, all] = await Promise.all([settings(), lists()]);
         s.lists[id] = on;
         await chrome.storage.local.set({ lists: s.lists });
         try {
             await syncRulesets();
+            if (all.find((l) => l.id === id)?.dynamic) await syncDynamicRules();
         } catch (err) {
             s.lists[id] = !on;
             await chrome.storage.local.set({ lists: s.lists });
@@ -624,11 +779,39 @@ const handlers = {
         return { ok: true };
     },
     'options:save-filters': ({ text }) => saveUserFilters(text),
+    'tweaks:set': async ({ tweaks }) => {
+        const s = await settings();
+        const next = { ...s.tweaks, ...tweaks, proxy: { ...s.tweaks.proxy, ...(tweaks.proxy || {}) } };
+        await chrome.storage.local.set({ tweaks: next });
+        await syncDynamicRules();
+        await applyTweaks();
+        return next;
+    },
+    'diagnostics': async () => {
+        const [rulesets, dynamic, session, scripts, access, s] = await Promise.all([
+            DNR.getEnabledRulesets(), DNR.getDynamicRules(), DNR.getSessionRules(),
+            chrome.scripting.getRegisteredContentScripts(), chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] }).catch(() => null), settings()
+        ]);
+        const available = await DNR.getAvailableStaticRuleCount().catch(() => null);
+        let webrtc = null;
+        try { webrtc = (await chrome.privacy?.network?.webRTCIPHandlingPolicy?.get({}))?.value ?? null; } catch { /* ignore */ }
+        let proxy = null;
+        try { proxy = IS_FIREFOX ? (proxyListener ? 'active (per-request)' : 'off') : (await chrome.proxy?.settings?.get({}))?.value?.mode ?? null; } catch { /* ignore */ }
+        return {
+            version: chrome.runtime.getManifest().version, browser: navigator.userAgent, firefox: IS_FIREFOX,
+            hostAccess: access, rulesets: rulesets.length, rulesetIds: rulesets, dynamicRules: dynamic.length, sessionRules: session.length,
+            contentScripts: scripts.length, staticRuleRoom: available, webrtc, proxy,
+            totals: await stats.totals(), allowedSites: s.disabledSites.length, userFilterLines: s.userFilters.split('\n').filter((l) => l.trim()).length,
+            errors, requestErrors: seenErrors,
+            limits: Object.fromEntries(Object.entries(DNR).filter(([k, v]) => /^[A-Z_]+$/.test(k) && typeof v === 'number'))
+        };
+    },
     'options:set-sites': async ({ sites }) => {
         const clean = [...new Set(sites.map((x) => x.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')).filter(Boolean))];
         await chrome.storage.local.set({ disabledSites: clean });
         await syncDynamicRules();
         await syncContentScripts();
+        await applyTweaks();
         return clean;
     }
 };
@@ -658,6 +841,6 @@ chrome.commands.onCommand.addListener(async (cmd, tab) => {
 chrome.runtime.onInstalled.addListener((d) => {
     setupMenus();
     syncAll(true);
-    if (d.reason === 'install') chrome.runtime.openOptionsPage();
+    if (d.reason === 'install') chrome.tabs.create({ url: chrome.runtime.getURL('welcome/welcome.html') });
 });
 chrome.runtime.onStartup.addListener(() => syncAll(false));

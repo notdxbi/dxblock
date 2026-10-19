@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // End-to-end test: loads dist/ into a clean Chromium and checks real pages.
-//   node tools/test.mjs [--headed] [--baseline]   (--baseline = run without the extension)
+//   node tools/test.mjs [--headed] [--baseline] [--quick] [--brave]
+//     --baseline  run without the extension      --quick  install + local checks only (no internet sites)
+//     --brave     use the installed Brave instead of Playwright's Chromium
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -11,6 +13,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
 const BASELINE = process.argv.includes('--baseline');
+const QUICK = process.argv.includes('--quick');
+const BRAVE = process.argv.includes('--brave');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'dxblock-test-'));
 const results = [];
 const check = (name, pass, detail = '') => {
@@ -53,7 +57,7 @@ const port = server.address().port;
 
 const args = BASELINE ? [] : [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`];
 const ctx = await chromium.launchPersistentContext(profile, {
-    channel: 'chromium',
+    ...(BRAVE ? { executablePath: process.env.BRAVE_BIN || '/opt/brave.com/brave/brave' } : { channel: 'chromium' }),
     headless: !process.argv.includes('--headed'),
     args: [...args, '--no-first-run', '--disable-features=DisableLoadExtensionCommandLineSwitch'],
     viewport: { width: 1280, height: 900 }
@@ -127,6 +131,13 @@ if (sw) {
 }
 check('jquery (not an ad) loads', local.net.jquery === 'loaded', local.net.jquery);
 
+if (QUICK) {
+    const failed = results.filter((r) => !r.pass);
+    console.log(`\n${results.length - failed.length}/${results.length} passed (quick)`);
+    await ctx.close(); server.close(); fs.rmSync(profile, { recursive: true, force: true });
+    process.exit(failed.length ? 1 : 0);
+}
+
 // 2. Public ad-block test page (adblock.turtlecute.org). Note: like uBlock Origin, some ad requests are
 //    answered with a harmless empty response instead of an error (defeats ad-block detection), which this
 //    test counts as "not blocked".
@@ -142,6 +153,21 @@ try {
     check('turtlecute ad-block test', BASELINE ? true : r.blocked === r.total, `${r.blocked}/${r.total} blocked`);
 } catch (e) {
     check('turtlecute ad-block test', false, e.message.split('\n')[0]);
+}
+
+// 2b. superadblocktest.com (482 ad / tracker / telemetry host probes)
+try {
+    await page.goto('https://superadblocktest.com/', { waitUntil: 'load', timeout: 60000 });
+    await page.waitForTimeout(3000);
+    await page.getByRole('button', { name: /start test/i }).first().click({ timeout: 8000 })
+        .catch(() => page.locator('text=/start test/i').first().click({ timeout: 8000 }));
+    await page.waitForTimeout(40000);
+    const txt = await page.evaluate(() => document.body.innerText);
+    const score = Number(/PROTECTION SCORE\s*(\d+)%/i.exec(txt)?.[1]);
+    const raw = Number(/RAW BLOCK RATE\s*(\d+)%/i.exec(txt)?.[1]);
+    check('superadblocktest.com score', BASELINE ? true : score === 100, `protection ${score}%, raw ${raw}%`);
+} catch (e) {
+    check('superadblocktest.com score', false, e.message.split('\n')[0]);
 }
 
 // 3. URL tracking parameters stripped
@@ -179,9 +205,10 @@ if (sw) {
     const pageTab = await ext.evaluate(async () => (await chrome.tabs.query({ url: 'http://localhost/*' }))[0]?.id);
     const st = await msg({ type: 'popup:state', tabId: pageTab });
     const badge = await sw.evaluate((id) => chrome.action.getBadgeText({ tabId: id }), pageTab);
-    check('blocked counter counts requests', st.stats.blocked >= 3, `blocked ${st.stats.blocked} (ads ${st.stats.ads}, trackers ${st.stats.trackers}), hidden ${st.hidden}, feed ${st.recent.length}`);
+    check('blocked counter counts requests', st.stats.blocked >= 3, `blocked ${st.stats.blocked} (ads ${st.stats.ads}, trackers ${st.stats.trackers}), feed ${st.recent.length}`);
     check('toolbar badge shows the count', Number(badge) === st.stats.blocked, `badge "${badge}"`);
-    check('elements hidden counted', st.hidden >= 3, `${st.hidden}`);
+    const hiddenN = await msg({ type: 'popup:hidden', tabId: pageTab });
+    check('elements hidden counted', hiddenN >= 3, `${hiddenN}`);
 
     // Dangerous page -> warning page
     await page.goto('https://vlc.de/', { timeout: 30000 }).catch(() => {});
@@ -247,6 +274,8 @@ if (sw) {
     await pop.goto(`chrome-extension://${extId}/popup/popup.html?tab=${liveTab}`);
     await pop.waitForTimeout(1600);
     await pop.screenshot({ path: path.join(os.tmpdir(), 'dxblock-popup.png') });
+    const banners = await pop.evaluate(() => ({ access: getComputedStyle(document.getElementById('access')).display, update: getComputedStyle(document.getElementById('update')).display, power: document.getElementById('power').checked }));
+    check('popup: no stray banners, protection shown on', banners.access === 'none' && banners.update === 'none' && banners.power, JSON.stringify(banners));
     await pop.close();
     await ext.close();
 }

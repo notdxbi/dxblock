@@ -1,6 +1,6 @@
 {
   "name": "dxblock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "dx.block: a thorough Manifest V3 ad blocker for Brave and Chromium",
   "scripts": {
     "build": "node tools/build.mjs",
@@ -15,7 +15,10 @@
   "devDependencies": {
     "@adguard/extended-css": "^2.3.0",
     "@adguard/scriptlets": "^2.5.1",
-    "playwright": "^1.64.1"
+    "geckodriver": "^6.1.1",
+    "playwright": "^1.64.1",
+    "selenium-webdriver": "^4.51.0",
+    "web-ext": "^8.10.0"
   },
   "type": "module",
   "private": true

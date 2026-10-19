@@ -68,7 +68,7 @@
                 if (m.type === 'attributes') collect(m.target);
                 else for (const n of m.addedNodes) scan(n);
             }
-            if (queue.size) schedule(document.readyState === 'loading' ? 30 : 100);
+            if (queue.size) schedule(document.readyState === 'loading' ? 20 : 0);
         });
         observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'id'] });
     };

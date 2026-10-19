@@ -1,0 +1,46 @@
+! Title: dx.block strict
+! Third-party marketing, analytics, social SDKs and chat/push widgets that the big lists allow to avoid breakage.
+! Their own sites (and embeds served from them) keep working; elsewhere they're blocked.
+! Turn this list off if a "Log in with Facebook" button, a support chat or an embed stops working.
+!
+! Social SDKs and pixels
+||connect.facebook.net^$third-party,important,domain=~facebook.com|~instagram.com|~messenger.com|~meta.com|~workplace.com|~oculus.com
+||graph.facebook.com^$third-party,important,domain=~facebook.com|~instagram.com|~messenger.com|~meta.com|~workplace.com|~oculus.com
+||graph.instagram.com^$third-party,important,domain=~instagram.com|~facebook.com|~threads.net|~threads.com
+||i.instagram.com^$third-party,important,domain=~instagram.com|~facebook.com|~threads.net|~threads.com
+||snap.licdn.com^$third-party,important,domain=~linkedin.com
+||analytics.twitter.com^$third-party,important,domain=~twitter.com|~x.com
+||widgets.pinterest.com^$third-party,important,domain=~pinterest.com
+! YouTube telemetry, ad insertion and video redirector outside YouTube's own player
+||s.youtube.com^$third-party,important,domain=~youtube.com|~youtube-nocookie.com|~youtubekids.com
+||redirector.googlevideo.com^$third-party,important,domain=~youtube.com|~youtube-nocookie.com|~youtubekids.com|~google.com
+||dai.google.com^$third-party,important,domain=~youtube.com|~youtube-nocookie.com
+||tagmanager.google.com^$third-party,important,domain=~google.com
+! Ad tech and consent platforms
+||inmobi.com^$third-party,important
+||quantcast.com^$third-party,important
+||fwmrm.net^$third-party,important
+||jwpltx.com^$third-party,important
+||ssl.p.jwpcdn.com^$xmlhttprequest,third-party,important
+! Product analytics, A/B testing and feature-flag telemetry
+||posthog.com^$third-party,important,domain=~posthog.com
+||rudderstack.com^$third-party,important,domain=~rudderstack.com
+||cdn.optimizely.com^$third-party,important
+||dynamicyield.com^$third-party,important
+||clientstream.launchdarkly.com^$third-party,important
+||bnc.lt^$third-party,important
+! Marketing pop-ups, push prompts and chat widgets
+||klaviyo.com^$third-party,important,domain=~klaviyo.com
+||onesignal.com^$third-party,important,domain=~onesignal.com
+||widget.intercom.io^$third-party,important
+||click.mailchimp.com^$third-party,important
+! Device telemetry
+||xp.apple.com^$third-party,important,domain=~apple.com|~icloud.com
+||ngfts.lge.com^$third-party,important
+! TV, OS and retargeting telemetry
+||amoeba.web.roku.com^$third-party,important
+||settings-win.data.microsoft.com^$third-party,important
+||tvinteractive.tv^$third-party,important
+||ibs.lgappstv.com^$third-party,important
+||vk.com/rtrg$third-party,important
+||list-manage.com^$xmlhttprequest,image,ping,third-party,important
