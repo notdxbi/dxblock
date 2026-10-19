@@ -1,0 +1,38 @@
+# Weekly: download fresh filter lists, build, test in Chromium, publish a release zip.
+name: Build & release
+on:
+  schedule:
+    - cron: '17 4 * * 1'      # Mondays 04:17 UTC
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Version
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; else V="$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')").${GITHUB_RUN_NUMBER}"; fi
+          npm pkg set version="$V"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+      - run: npm run build
+      - run: npm test
+      - run: npm run package
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: dx.block ${{ steps.v.outputs.version }}
+          body: Filter lists refreshed on ${{ github.event.repository.updated_at }}. Upload the zip to the Chrome Web Store, or load it unpacked.
+          files: dxblock-${{ steps.v.outputs.version }}.zip

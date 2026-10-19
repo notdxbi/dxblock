@@ -1,0 +1,15 @@
+body { width: 300px; padding: 14px; }
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.icon { padding: 4px 9px; font-size: 16px; background: transparent; color: var(--muted); }
+.site { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; text-align: center; }
+.host { font-weight: 600; word-break: break-all; }
+.count { margin-top: 6px; }
+.count strong { font-size: 30px; color: var(--accent); display: block; line-height: 1.1; }
+.power { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; cursor: pointer; }
+.power-title { font-weight: 600; }
+.small { font-size: 12px; }
+.actions { margin-top: 10px; display: grid; }
+.reload { text-align: center; margin: 8px 0 0; color: var(--accent-2); }
+footer { margin-top: 12px; text-align: center; }
+body.off .count strong { color: var(--muted); }
+body.na .power, body.na .actions { opacity: .5; pointer-events: none; }

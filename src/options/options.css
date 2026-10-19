@@ -1,0 +1,31 @@
+.wrap { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
+header .logo { font-size: 22px; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav a { color: var(--muted); text-decoration: none; padding: 7px 12px; border-radius: 9px; font-weight: 600; }
+nav a:hover { color: var(--text); }
+nav a.on { background: var(--panel-2); color: var(--text); }
+h1 { font-size: 24px; margin: 0 0 6px; }
+h2 { font-size: 16px; margin: 22px 0 6px; }
+.small { font-size: 12px; }
+.group { margin-top: 20px; }
+.group h2 { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; color: var(--muted); }
+.list { display: flex; align-items: center; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 8px; }
+.list .info { flex: 1; min-width: 0; }
+.list .name { font-weight: 600; }
+.list .name a { color: inherit; text-decoration: none; }
+.list .name a:hover { text-decoration: underline; }
+.list .meta { font-size: 12px; color: var(--muted); }
+.list .err { font-size: 12px; color: var(--accent-2); }
+textarea { width: 100%; min-height: 320px; resize: vertical; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 12px; font: 13px/1.5 ui-monospace, "JetBrains Mono", monospace; }
+textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.bar { display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+.help { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.help summary { cursor: pointer; font-weight: 600; }
+.help table { border-collapse: collapse; margin-top: 8px; width: 100%; }
+.help td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+code { font: 12.5px ui-monospace, monospace; background: var(--panel-2); padding: 1px 5px; border-radius: 5px; }
+.credits li { margin: 6px 0; }
+.credits a, #about a { color: var(--accent-2); }
+.ok { color: var(--ok); }
+.bad { color: var(--accent-2); }

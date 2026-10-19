@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>dx.block settings</title>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo">dx<b>.</b>block</span>
+    <nav>
+      <a href="#lists" class="on">Filter lists</a>
+      <a href="#filters">My filters</a>
+      <a href="#sites">Allowed sites</a>
+      <a href="#about">About</a>
+    </nav>
+  </header>
+
+  <section id="lists" class="tab">
+    <h1>Filter lists</h1>
+    <p class="muted">The same community lists that power uBlock Origin, AdGuard and Adblock Plus, compiled into Chrome's native, fast blocking engine. Lists update with each extension release.</p>
+    <div id="list-groups"></div>
+    <p class="muted small" id="capacity"></p>
+  </section>
+
+  <section id="filters" class="tab" hidden>
+    <h1>My filters</h1>
+    <p class="muted">One filter per line. Adblock Plus, uBlock Origin and AdGuard syntax all work.</p>
+    <textarea id="user-filters" spellcheck="false" placeholder="! Examples
+||ads.example.com^
+example.com##.sponsored-banner
+example.com##+js(set-constant, adsEnabled, false)
+@@||example.com/needed-script.js$script"></textarea>
+    <div class="bar"><button class="primary" id="save-filters">Save filters</button><span id="filters-status" class="muted"></span></div>
+    <details class="help"><summary>Filter syntax cheat sheet</summary>
+      <table>
+        <tr><td><code>||ads.example.com^</code></td><td>Block a domain and its subdomains</td></tr>
+        <tr><td><code>/banner/*.gif$image</code></td><td>Block matching images</td></tr>
+        <tr><td><code>||tracker.com^$third-party</code></td><td>Only when loaded by other sites</td></tr>
+        <tr><td><code>@@||example.com^$document</code></td><td>Turn blocking off on a site</td></tr>
+        <tr><td><code>example.com##.ad-box</code></td><td>Hide elements on one site</td></tr>
+        <tr><td><code>##.ad-box</code></td><td>Hide elements everywhere</td></tr>
+        <tr><td><code>example.com##div:has-text(Sponsored)</code></td><td>Procedural hiding</td></tr>
+        <tr><td><code>example.com##+js(abort-on-property-read, adBlockDetected)</code></td><td>Run a scriptlet</td></tr>
+      </table>
+    </details>
+  </section>
+
+  <section id="sites" class="tab" hidden>
+    <h1>Allowed sites</h1>
+    <p class="muted">dx.block is switched off on these sites (one per line). You can also toggle a site from the toolbar button.</p>
+    <textarea id="sites-list" spellcheck="false" placeholder="example.com"></textarea>
+    <div class="bar"><button class="primary" id="save-sites">Save</button><span id="sites-status" class="muted"></span></div>
+  </section>
+
+  <section id="about" class="tab" hidden>
+    <h1>About</h1>
+    <p><span class="logo">dx<b>.</b>block</span> <span class="muted" id="version"></span></p>
+    <p>An open-source ad blocker for Brave, Chrome and other Chromium browsers. Free software under the GNU GPL v3.</p>
+    <h2>Keyboard &amp; menus</h2>
+    <p class="muted">Right-click any page → <b>Block element…</b>, or set a shortcut for “Block an element” at <code>brave://extensions/shortcuts</code>.</p>
+    <h2>Credits</h2>
+    <ul class="credits">
+      <li><a href="https://easylist.to/" target="_blank" rel="noopener">EasyList &amp; EasyPrivacy</a>: The EasyList authors (GPL-3.0 / CC BY-SA 3.0)</li>
+      <li><a href="https://github.com/uBlockOrigin/uAssets" target="_blank" rel="noopener">uBlock Origin filter lists</a>: Raymond Hill and contributors (GPL-3.0)</li>
+      <li><a href="https://github.com/AdguardTeam/AdguardFilters" target="_blank" rel="noopener">AdGuard filters</a>, <a href="https://github.com/AdguardTeam/Scriptlets" target="_blank" rel="noopener">Scriptlets</a> and <a href="https://github.com/AdguardTeam/ExtendedCss" target="_blank" rel="noopener">ExtendedCss</a>: AdGuard (GPL-3.0)</li>
+      <li><a href="https://pgl.yoyo.org/adservers/" target="_blank" rel="noopener">Peter Lowe's ad server list</a></li>
+      <li><a href="https://gitlab.com/malware-filter/urlhaus-filter" target="_blank" rel="noopener">Malicious URL Blocklist</a>: curbengh, based on URLhaus by abuse.ch (CC0 / MIT)</li>
+      <li><a href="https://secure.fanboy.co.nz/" target="_blank" rel="noopener">Fanboy's lists</a>: Fanboy (CC BY 3.0)</li>
+    </ul>
+  </section>
+</div>
+<script src="options.js" type="module"></script>
+</body>
+</html>

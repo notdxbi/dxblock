@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>dx.block</title>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="logo">dx<b>.</b>block</span>
+    <button id="settings" class="icon" title="Settings" aria-label="Settings">⚙</button>
+  </header>
+
+  <section class="site">
+    <div class="host" id="host">—</div>
+    <div class="count"><strong id="blocked">0</strong><span class="muted"> blocked on this page</span></div>
+  </section>
+
+  <label class="power" id="power-row">
+    <div>
+      <div class="power-title" id="power-title">Protection on</div>
+      <div class="muted small" id="power-sub">Ads and trackers are blocked on this site</div>
+    </div>
+    <span class="switch"><input type="checkbox" id="power"><span></span></span>
+  </label>
+
+  <div class="actions">
+    <button id="pick" class="primary">Block an element</button>
+  </div>
+  <p class="muted small reload" id="reload" hidden>Reload the page to apply.</p>
+  <footer class="muted small" id="lists"></footer>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>
