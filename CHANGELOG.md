@@ -1,5 +1,8 @@
 # Changelog
 
+## Samsung app (with 1.2.1)
+- New: dx.block for Samsung phones. An Android app that plugs into Samsung Internet's ad-blocker slot with dx.block's lists (about 226,000 filters by default), daily list updates, list switches and an allowed-sites list
+
 ## 1.2.1
 - Fixed: the browser could freeze or stutter for up to ~20 seconds right after opening. dx.block rewrote its page-script registry on every startup; it now only does so when something changed, and registers half as many site patterns
 - Filter lists updated

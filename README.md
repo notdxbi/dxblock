@@ -8,6 +8,8 @@
   <a href="LICENSE"><img alt="GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-222?style=flat-square"></a>
 </p>
 
+<p align="center"><a href="../../releases/latest/download/dxblock-samsung.apk"><img alt="Download for Samsung phones" src="https://img.shields.io/badge/Samsung%20phones-download%20APK-e50914?style=for-the-badge&logo=samsung&logoColor=white"></a></p>
+
 <p align="center"><img src="docs/popup.png" width="300" alt="The dx.block popup: a live web of the trackers being caught"></p>
 
 ---
@@ -84,6 +86,18 @@ Download the [latest release](../../releases/latest).
 - If the release has `dxblock-<version>-firefox.xpi`, open it in Firefox to install. It's signed by Mozilla and **updates itself**.
 - Otherwise use `about:debugging` → *This Firefox* → *Load Temporary Add-on* with the `-firefox.zip`.
 
+**Samsung phones (Samsung Internet)**
+1. On the phone, tap **[Download dxblock-samsung.apk](../../releases/latest/download/dxblock-samsung.apk)** and open it.
+   Android asks once to allow installs from your browser; allow it and tap **Install**
+2. Open **dx.block** and tap **Open Samsung Internet ad blockers**, then switch dx.block on
+
+dx.block plugs into Samsung Internet's built-in ad-blocker slot, so it blocks inside the browser with no VPN and no
+battery cost. It uses the same lists as the desktop version (about 226,000 filters by default) and refreshes them
+daily. Scriptlets, YouTube fixes and the other extension-only features aren't possible there: Samsung's engine
+takes plain Adblock Plus filters only. Samsung Internet lists ad blockers Samsung has approved; until dx.block is,
+it shows up after typing `internet://contentblock` in Samsung Internet's address bar and turning on *Developer mode*.
+Prefer Firefox on your phone? Firefox for Android runs the full extension once it's on addons.mozilla.org.
+
 **Updates.** Filter lists are rebuilt every Monday and published as a new release. Signed Firefox builds update
 automatically; on Chromium browsers dx.block shows an "Update available" banner in its popup when a new release is out
 (Chrome-family browsers only auto-update extensions installed from the Chrome Web Store).
@@ -110,6 +124,7 @@ npm run build          # downloads the latest lists -> dist/ (Chromium) and dist
 npm test               # end-to-end tests in Chromium (npx playwright install chromium); --brave for Brave
 node tools/test-firefox.mjs   # Firefox test (real Firefox, temporary add-on)
 npm run package        # store zips
+npm run android        # Samsung Internet app -> dxblock-samsung.apk (Android SDK + JDK, no Gradle)
 ```
 
 | Piece | Where |
@@ -118,6 +133,7 @@ npm run package        # store zips
 | Build, list catalog, own lists | `tools/build.mjs`, `tools/lists.mjs`, `tools/fixes.txt`, `tools/strict.txt` |
 | Service worker: blocking setup, cosmetics, pop-ups, stats, tweaks | `src/background.js`, `src/stats.js` |
 | Popup, settings, welcome page, element picker | `src/popup`, `src/options`, `src/welcome`, `src/content` |
+| Samsung Internet app (filter converter, content provider, settings screen) | `android/`, `tools/android.mjs` |
 
 ## About
 

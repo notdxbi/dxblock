@@ -7,6 +7,7 @@
     "build:offline": "node tools/build.mjs --offline",
     "test": "node tools/test.mjs",
     "package": "node tools/package.mjs",
+    "android": "node tools/android.mjs",
     "release": "node tools/build.mjs && node tools/test.mjs && node tools/package.mjs"
   },
   "keywords": [],
