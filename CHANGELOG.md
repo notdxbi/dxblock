@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+- Fixed: the browser could freeze or stutter for up to ~20 seconds right after opening. dx.block rewrote its page-script registry on every startup; it now only does so when something changed, and registers half as many site patterns
+- Filter lists updated
+
 ## 1.2.0
 - Live tracker web: blocked requests fly in, get grabbed and pinned to the company behind them (popup + full-screen dashboard)
 - Full-screen dashboard with live chart, company breakdown, privacy grade, protection status and weekly privacy report
