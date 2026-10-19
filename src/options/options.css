@@ -60,3 +60,4 @@ code { font: 12.5px ui-monospace, monospace; background: rgba(255,255,255,.07); 
 .fields input, .fields select { background: var(--panel-solid); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; font: 14px system-ui, sans-serif; }
 .fields input:focus, .fields select:focus { outline: none; border-color: rgba(229,9,20,.6); box-shadow: 0 0 0 3px rgba(229,9,20,.15); }
 .diag { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 13px; padding: 14px; font: 12.5px/1.55 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto; }
+.small-area { min-height: 90px; margin-top: 4px; font-size: 13px; }

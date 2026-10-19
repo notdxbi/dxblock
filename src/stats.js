@@ -1,12 +1,14 @@
 // Per-tab blocking statistics: the toolbar badge, the popup's counters and its live feed.
 // Fed by webRequest observers in background.js (they only watch; blocking itself is done by DNR).
+import { companyOf } from './lib/companies.js';
 
 const tabs = new Map();          // tabId -> stats for the page currently shown in the tab
 const ports = new Map();         // tabId -> Set of popup ports listening live
 const badgeTimers = new Map();
 let saveTimer = 0;
 let totalsTimer = 0;
-let pendingTotals = { blocked: 0, trackers: 0, popups: 0 };
+const ZERO = () => ({ blocked: 0, trackers: 0, popups: 0, fp: 0, unwrapped: 0, amp: 0, sponsor: 0, cleaned: 0, phishing: 0, cookies: 0, companies: {} });
+let pendingTotals = ZERO();
 
 const TRACKER_RE = /analytic|track|pixel|telemetry|metric|stats?[./-]|collect|beacon|insight|tagmanager|gtag|segment|mixpanel|hotjar|clarity|fbevents|matomo|piwik|amplitude|heap(?:analytics)?|fullstory|newrelic|nr-data|sentry|quantserve|scorecardresearch|chartbeat|optimizely|bat\.bing|connect\.facebook|ads-twitter|snap\.licdn|bounceexchange|crazyegg|mouseflow|smartlook|yandex\.ru\/(?:metrika|watch)|mc\.yandex|ophan\.|\blogs?[.-]|[./-]events?[./]|\brum[.-]|measure|monitor|sessioncam|permutive|bluekai|demdex|omtrdc|2o7\.net|everesttech|adobedtm|tealium|parsely|cxense|piano\.io|tinypass|branch\.io|appsflyer|adjust\.com|kochava|onesignal|pushwoosh|doubleverify|moatads|iasds|adsafeprotected/i;
 const MALWARE_HINT = /\.(?:exe|apk|scr|msi|zip)(?:$|\?)/i;
@@ -18,7 +20,7 @@ export function kindOf(url) {
 }
 
 const hostOf = (url) => { try { return new URL(url).hostname; } catch { return ''; } };
-const fresh = (url) => ({ host: hostOf(url), blocked: 0, ads: 0, trackers: 0, threats: 0, stealth: 0, params: 0, popups: 0, recent: [], hosts: {}, since: Date.now() });
+const fresh = (url) => ({ host: hostOf(url), blocked: 0, ads: 0, trackers: 0, threats: 0, stealth: 0, params: 0, popups: 0, fp: 0, fpApis: [], unwrapped: 0, amp: 0, sponsor: 0, recent: [], hosts: {}, companies: {}, since: Date.now() });
 
 export function getTab(tabId) {
     let s = tabs.get(tabId);
@@ -53,13 +55,42 @@ export function record(tabId, kind, url) {
         else s.ads++;
     }
     if (kind !== 'param') pendingTotals.blocked++;
-    if (kind !== 'param') { s.hosts ||= {}; s.hosts[host] = (s.hosts[host] || 0) + 1; }
-    const ev = { kind, host, t: Date.now() };
+    if (kind !== 'param') {
+        s.hosts ||= {};
+        s.hosts[host] = (s.hosts[host] || 0) + 1;
+        const company = companyOf(host);
+        if (company) {
+            s.companies ||= {};
+            s.companies[company] = (s.companies[company] || 0) + 1;
+            pendingTotals.companies[company] = (pendingTotals.companies[company] || 0) + 1;
+        }
+    }
+    const ev = { kind, host, t: Date.now(), company: companyOf(host) };
     s.recent.unshift(ev);
     if (s.recent.length > 60) s.recent.length = 60;
     updateBadge(tabId);
     broadcast(tabId, { type: 'event', ev, stats: summary(tabId), top: topHosts(tabId, 4) });
     scheduleSave();
+    scheduleTotals();
+}
+
+// Non-blocking events: fingerprinting attempts, unwrapped links, AMP skips, sponsor skips, phishing warnings, ...
+export function event(tabId, kind, detail = '') {
+    const s = tabId >= 0 ? getTab(tabId) : null;
+    if (kind === 'fp') {
+        pendingTotals.fp++;
+        if (s && !s.fpApis.includes(detail)) { s.fpApis.push(detail); s.fp++; }
+    } else if (kind in pendingTotals) {
+        pendingTotals[kind]++;
+        if (s && kind in s) s[kind]++;
+    }
+    if (s) {
+        const ev = { kind, host: detail || s.host, t: Date.now() };
+        s.recent.unshift(ev);
+        if (s.recent.length > 60) s.recent.length = 60;
+        broadcast(tabId, { type: 'event', ev, stats: summary(tabId), top: topHosts(tabId, 4) });
+        scheduleSave();
+    }
     scheduleTotals();
 }
 
@@ -127,20 +158,45 @@ function scheduleSave() {
         chrome.storage.session.set({ tabStats: obj }).catch(() => {});
     }, 1000);
 }
+const day = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+const addInto = (target, add) => {
+    for (const [k, v] of Object.entries(add)) {
+        if (k === 'companies') {
+            target.companies ||= {};
+            for (const [c, n] of Object.entries(v)) target.companies[c] = (target.companies[c] || 0) + n;
+        } else target[k] = (target[k] || 0) + v;
+    }
+    if (target.companies && Object.keys(target.companies).length > 250) {
+        target.companies = Object.fromEntries(Object.entries(target.companies).sort((a, b) => b[1] - a[1]).slice(0, 200));
+    }
+};
 function scheduleTotals() {
     if (totalsTimer) return;
     totalsTimer = setTimeout(async () => {
         totalsTimer = 0;
         const add = pendingTotals;
-        pendingTotals = { blocked: 0, trackers: 0, popups: 0 };
-        const { totals = { blocked: 0, trackers: 0, popups: 0, since: Date.now() } } = await chrome.storage.local.get('totals');
-        for (const k of Object.keys(add)) totals[k] = (totals[k] || 0) + add[k];
-        await chrome.storage.local.set({ totals });
+        pendingTotals = ZERO();
+        const { totals = { since: Date.now() }, history = {} } = await chrome.storage.local.get(['totals', 'history']);
+        addInto(totals, add);
+        const today = day();
+        history[today] ||= {};
+        addInto(history[today], add);
+        for (const d of Object.keys(history).sort().slice(0, -60)) delete history[d];   // keep 60 days
+        await chrome.storage.local.set({ totals, history });
     }, 4000);
 }
 export async function totals() {
-    const { totals: t = { blocked: 0, trackers: 0, popups: 0, since: Date.now() } } = await chrome.storage.local.get('totals');
-    return { ...t, blocked: t.blocked + pendingTotals.blocked, trackers: t.trackers + pendingTotals.trackers, popups: t.popups + pendingTotals.popups };
+    const { totals: t = { since: Date.now() } } = await chrome.storage.local.get('totals');
+    const out = { blocked: 0, trackers: 0, popups: 0, ...structuredClone(t) };
+    addInto(out, pendingTotals);
+    return out;
+}
+export async function history() {
+    const { history: h = {} } = await chrome.storage.local.get('history');
+    const out = structuredClone(h);
+    out[day()] ||= {};
+    addInto(out[day()], pendingTotals);
+    return out;
 }
 
 export const restored = chrome.storage.session.get('tabStats').then(({ tabStats }) => {

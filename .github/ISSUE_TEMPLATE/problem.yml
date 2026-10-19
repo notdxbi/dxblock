@@ -1,0 +1,41 @@
+name: Report a problem
+description: An ad or tracker got through, or a site is broken with dx.block on
+labels: [report]
+body:
+  - type: input
+    id: site
+    attributes:
+      label: Site
+      description: The website (no need for the full address if it contains personal information)
+      placeholder: example.com
+    validations:
+      required: true
+  - type: dropdown
+    id: problem
+    attributes:
+      label: What's wrong?
+      options:
+        - An ad is still showing
+        - A pop-up or redirect got through
+        - A cookie banner or overlay is still showing
+        - The site is broken or won't load
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Where on the page, and what you expected. A screenshot helps a lot.
+  - type: input
+    id: version
+    attributes:
+      label: dx.block version
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+  - type: input
+    id: lists
+    attributes:
+      label: Active filter lists

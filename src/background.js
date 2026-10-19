@@ -4,6 +4,7 @@ import {
 } from './lib/filters.js';
 import { S as SCRIPTLETS, ALIASES, VERSION as SCRIPTLETS_VERSION } from './lib/scriptlet-lib.js';
 import * as stats from './stats.js';
+import { lookalike, toUnicode } from './lib/lookalike.js';
 
 const DNR = chrome.declarativeNetRequest;
 const IS_FIREFOX = typeof browser !== 'undefined' && typeof browser.runtime?.getBrowserInfo === 'function';
@@ -19,6 +20,27 @@ self.addEventListener('unhandledrejection', (e) => logError('promise', e.reason)
 const USER_RULE_BASE = 10_000;
 const TWEAK_RULE_BASE = 9_000;
 const DYNAMIC_LIST_BASE = 100_000;
+const HOTFIX_RULE_BASE = 50_000;
+
+// Tracking redirects dx.block skips. dnr: RE2 pattern for the main-frame redirect rule; params: where the real URL is.
+const UNWRAP = [
+    { dnr: '^https?://(?:www\\.)?google\\.[a-z.]{2,7}/url\\?(?:.*&)?(?:q|url)=https?', re: '^https?://(?:www\\.)?google\\.[a-z.]{2,7}/url\\?', params: ['q', 'url'] },
+    { dnr: '^https?://(?:l|lm)\\.facebook\\.com/l\\.php\\?', re: '^https?://(?:l|lm)\\.facebook\\.com/l\\.php\\?', params: ['u'] },
+    { dnr: '^https?://l\\.instagram\\.com/\\?', re: '^https?://l\\.instagram\\.com/\\?', params: ['u'] },
+    { dnr: '^https?://l\\.messenger\\.com/l\\.php\\?', re: '^https?://l\\.messenger\\.com/l\\.php\\?', params: ['u'] },
+    { dnr: '^https?://l\\.threads\\.(?:net|com)/\\?', re: '^https?://l\\.threads\\.(?:net|com)/\\?', params: ['u'] },
+    { dnr: '^https?://out\\.reddit\\.com/', re: '^https?://out\\.reddit\\.com/', params: ['url'] },
+    { dnr: '^https?://(?:www\\.)?youtube\\.com/redirect\\?', re: '^https?://(?:www\\.)?youtube\\.com/redirect\\?', params: ['q'] },
+    { dnr: '^https?://(?:m\\.)?vk\\.com/away\\.php\\?', re: '^https?://(?:m\\.)?vk\\.com/away\\.php\\?', params: ['to'] },
+    { dnr: '^https?://(?:www\\.)?linkedin\\.com/redir/redirect\\?', re: '^https?://(?:www\\.)?linkedin\\.com/redir/redirect\\?', params: ['url'] },
+    { dnr: '^https?://disq\\.us/url\\?', re: '^https?://disq\\.us/url\\?', params: ['url'] },
+    { dnr: '^https?://(?:www\\.)?duckduckgo\\.com/l/\\?', re: '^https?://(?:www\\.)?duckduckgo\\.com/l/\\?', params: ['uddg'] },
+    { dnr: '^https?://href\\.li/\\?', re: '^https?://href\\.li/\\?', params: ['*'] },
+    { dnr: '^https?://slack-redir\\.net/link\\?', re: '^https?://slack-redir\\.net/link\\?', params: ['url'] },
+    { dnr: '^https?://(?:www\\.)?deviantart\\.com/users/outgoing\\?', re: '^https?://(?:www\\.)?deviantart\\.com/users/outgoing\\?', params: ['*'] },
+    { dnr: '^https?://t\\.umblr\\.com/redirect\\?', re: '^https?://t\\.umblr\\.com/redirect\\?', params: ['z'] },
+    { dnr: '^https?://(?:www\\.)?pinterest\\.[a-z.]+/offsite/\\?', re: '^https?://(?:www\\.)?pinterest\\.[a-z.]+/offsite/\\?', params: ['url'] }
+];
 const SITE_RULE_BASE = 1;
 
 // ---------------------------------------------------------------------------
@@ -53,7 +75,8 @@ async function getPopupFilters() {
     if (!popupFilters) {
         const raw = await json('data/popups.json');
         const { user } = await userData();
-        popupFilters = [...raw, ...user.popups].map((p) => {
+        const hf = (await settings()).tweaks.hotfix ? (await hotfixData()).popups : [];
+        popupFilters = [...raw, ...user.popups, ...hf].map((p) => {
             try { return { ...p, rx: new RegExp(p.re, 'i') }; } catch { return null; }
         }).filter(Boolean);
     }
@@ -70,6 +93,19 @@ const TWEAK_DEFAULTS = {
     gpc: true,               // send Global Privacy Control / Do Not Track
     referrer: false,         // strip the Referer header on third-party requests
     notifications: false,    // auto-deny "Allow notifications?" prompts
+    fingerprint: true,       // noise for canvas / WebGL / audio / font fingerprinting
+    unwrap: true,            // skip tracking redirects (google.com/url, l.facebook.com, ...)
+    amp: true,               // AMP pages -> the original article
+    beacons: true,           // block third-party tracking beacons and link-click pings
+    cookies3p: true,         // no cookies sent to / set by third-party resources (embedded frames keep theirs)
+    lookalike: true,         // warn on fake sites imitating well-known brands
+    httpWarn: true,          // warn before typing a password on an insecure (http) page
+    httpsOnly: false,        // upgrade every connection to HTTPS (falls back when a site has no HTTPS)
+    blend: false,            // sites see UTC and US English
+    forget: false,           // delete a site's cookies and storage when its last tab closes
+    keepSites: [],           // ... except these
+    sponsorblock: false,     // skip sponsor segments on YouTube
+    hotfix: true,            // daily fast fixes from the dx.block repo
     proxy: { mode: 'off', scheme: 'socks5', host: '127.0.0.1', port: 9050, user: '', pass: '' }
 };
 const DEFAULTS = { lists: {}, disabledSites: [], userFilters: '', tweaks: TWEAK_DEFAULTS };
@@ -231,7 +267,42 @@ async function syncDynamicRules() {
         action: { type: 'modifyHeaders', requestHeaders: [{ header: 'Referer', operation: 'remove' }] },
         condition: { domainType: 'thirdParty', resourceTypes: ALL_TYPES.filter((x) => x !== 'main_frame') }
     });
+    const NON_FRAME = ['stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'media', 'websocket', 'other'];
+    if (tw.beacons) add.push({
+        id: TWEAK_RULE_BASE + 2, priority: PRIORITY.block,
+        action: { type: 'block' }, condition: { domainType: 'thirdParty', resourceTypes: ['ping'] }
+    });
+    if (tw.cookies3p) add.push({
+        id: TWEAK_RULE_BASE + 3, priority: 1,
+        action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'remove' }], responseHeaders: [{ header: 'set-cookie', operation: 'remove' }] },
+        condition: { domainType: 'thirdParty', resourceTypes: NON_FRAME }
+    });
+    if (tw.httpsOnly) add.push({
+        id: TWEAK_RULE_BASE + 4, priority: 1,
+        action: { type: 'upgradeScheme' },
+        condition: { urlFilter: '|http://', resourceTypes: ['main_frame', 'sub_frame'], excludedRequestDomains: ['localhost', 'local', 'lan', 'home.arpa', 'internal', 'test', '127.0.0.1'] }
+    });
+    if (tw.blend) add.push({
+        id: TWEAK_RULE_BASE + 5, priority: 1,
+        action: { type: 'modifyHeaders', requestHeaders: [{ header: 'Accept-Language', operation: 'set', value: 'en-US,en;q=0.9' }] },
+        condition: { resourceTypes: ALL_TYPES }
+    });
+    if (tw.unwrap) {
+        UNWRAP.forEach((p, i) => add.push({
+            id: TWEAK_RULE_BASE + 20 + i, priority: PRIORITY.redirect,
+            action: { type: 'redirect', redirect: { regexSubstitution: `${chrome.runtime.getURL('unwrap/unwrap.html')}#\\0` } },
+            condition: { regexFilter: p.dnr, resourceTypes: ['main_frame'] }
+        }));
+    }
+    if (tw.amp) add.push({
+        id: TWEAK_RULE_BASE + 60, priority: PRIORITY.redirect,
+        action: { type: 'redirect', redirect: { regexSubstitution: 'https://\\1' } },
+        condition: { regexFilter: '^https?://(?:www\\.)?google\\.[a-z.]+/amp/s/(.+)$', resourceTypes: ['main_frame'] }
+    });
     user.rules.forEach((r, i) => add.push({ ...r, id: USER_RULE_BASE + i }));
+    // Fast fixes downloaded from the repo (network part)
+    const hf = tw.hotfix ? await hotfixData() : null;
+    (hf?.rules || []).slice(0, 2000).forEach((r, i) => add.push({ ...r, id: HOTFIX_RULE_BASE + i }));
     // Lists the Firefox build loads as dynamic rules (Firefox's static budget is 30k)
     let next = DYNAMIC_LIST_BASE;
     for (const l of await enabledLists()) {
@@ -317,7 +388,13 @@ chrome.alarms?.create('update-check', { delayInMinutes: 2, periodInMinutes: 24 *
 // ---------------------------------------------------------------------------
 // Privacy tweaks
 // ---------------------------------------------------------------------------
-const TWEAK_SCRIPTS = { gpc: 'content/gpc.js', notifications: 'content/no-notifications.js' };
+const TWEAK_SCRIPTS = {
+    gpc: { file: 'content/gpc.js', world: 'MAIN' },
+    notifications: { file: 'content/no-notifications.js', world: 'MAIN' },
+    fingerprint: { file: 'content/fingerprint.js', world: 'MAIN' },
+    blend: { file: 'content/blend.js', world: 'MAIN' },
+    sponsorblock: { file: 'content/sponsorblock.js', world: 'ISOLATED', matches: ['*://*.youtube.com/*'], allFrames: false }
+};
 let proxyListener = null;
 let proxyAuth = null;
 
@@ -331,9 +408,9 @@ async function applyTweaks() {
     // Page-side scripts (GPC flag, notification blocker)
     const existing = (await chrome.scripting.getRegisteredContentScripts()).filter((r) => r.id.startsWith('dxbt-')).map((r) => r.id);
     if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing }).catch(() => {});
-    const wanted = Object.entries(TWEAK_SCRIPTS).filter(([k]) => tw[k]).map(([k, file]) => ({
-        id: `dxbt-${k}`, js: [file], matches: ['<all_urls>'], excludeMatches: disabledSites.flatMap(sitePatterns),
-        runAt: 'document_start', allFrames: true, world: 'MAIN', persistAcrossSessions: true
+    const wanted = Object.entries(TWEAK_SCRIPTS).filter(([k]) => tw[k]).map(([k, s]) => ({
+        id: `dxbt-${k}`, js: [s.file], matches: s.matches || ['<all_urls>'], excludeMatches: disabledSites.flatMap(sitePatterns),
+        runAt: 'document_start', allFrames: s.allFrames ?? true, world: s.world, persistAcrossSessions: true
     }));
     if (wanted.length) await chrome.scripting.registerContentScripts(wanted).catch((e) => logError('tweak scripts', e));
 
@@ -383,6 +460,7 @@ async function syncAll(force = false) {
     await chrome.action.setBadgeBackgroundColor({ color: '#e50914' }).catch(() => {});
     await chrome.action.setBadgeTextColor?.({ color: '#ffffff' }).catch?.(() => {});
     await applyTweaks().catch((e) => logError('tweaks', e));
+    fetchHotfix();
     await chrome.storage.session.set({ ready: Date.now() });
 }
 // The proxy listener (Firefox) and auth cache live in memory: restore them whenever the worker starts
@@ -476,6 +554,15 @@ async function onNavigation(details) {
             for (const rule of e.css[k] || []) css += `${rule}\n`;
             ext.push(...(e.ext[k] || []));
             calls.push(...(e.scriptlets[k] || []));
+        }
+    }
+    const hfc = (await settings()).tweaks.hotfix ? (await hotfixData()).cosmetic : null;
+    if (hfc) {
+        for (const sel of hfc.genericHide) css += `${sel}{display:none!important}\n`;
+        for (const k of keys) {
+            for (const sel of hfc.hide[k] || []) css += `${sel}{display:none!important}\n`;
+            for (const rule of hfc.css[k] || []) css += `${rule}\n`;
+            ext.push(...(hfc.ext[k] || []));
         }
     }
     const uc = user.cosmetic;
@@ -673,6 +760,117 @@ async function saveUserFilters(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Fast fixes: a small filter file in the repo, fetched daily, so broken sites / new YouTube tricks get fixed
+// without waiting for a release. Network + cosmetic filters only (no scriptlets): data, never code.
+// ---------------------------------------------------------------------------
+const HOTFIX_URL = `https://raw.githubusercontent.com/${REPO}/main/hotfix/hotfix.txt`;
+let hotfixCache = null;
+async function hotfixData() {
+    if (hotfixCache) return hotfixCache;
+    const { hotfix } = await chrome.storage.local.get('hotfix');
+    const safe = (hotfix?.text || '').split('\n').filter((l) => !/#@?%#|\+js\(|#\$#/.test(l)).join('\n');
+    hotfixCache = await compileUserFilters(safe);
+    return hotfixCache;
+}
+async function fetchHotfix() {
+    const { tweaks } = await settings();
+    if (!tweaks.hotfix) return;
+    try {
+        const r = await fetch(HOTFIX_URL, { cache: 'no-store' });
+        if (!r.ok) return;
+        const text = (await r.text()).slice(0, 200_000);
+        const { hotfix } = await chrome.storage.local.get('hotfix');
+        if (hotfix?.text === text) return;
+        await chrome.storage.local.set({ hotfix: { text, at: Date.now() } });
+        hotfixCache = null;
+        popupFilters = null;
+        await syncDynamicRules();
+    } catch (e) { logError('fast fixes', e); }
+}
+chrome.alarms?.onAlarm.addListener((a) => { if (a.name === 'hotfix') fetchHotfix(); });
+chrome.alarms?.create('hotfix', { delayInMinutes: 1, periodInMinutes: 6 * 60 });
+
+// ---------------------------------------------------------------------------
+// Fake-site warning (look-alike domains) and HTTPS-only fallback
+// ---------------------------------------------------------------------------
+const trustedHosts = new Set();      // "Proceed anyway" for this browser session
+const upgraded = new Map();          // tabId -> http URL that HTTPS-only upgraded
+
+async function checkLookalike(d) {
+    if (d.frameId !== 0 || !/^https?:/.test(d.url)) return;
+    const host = hostOf(d.url);
+    if (trustedHosts.has(host)) return;
+    const { tweaks } = await settings();
+    if (!tweaks.lookalike || await isDisabled(host)) return;
+    const hit = lookalike(host, toUnicode(host));
+    if (!hit) return;
+    stats.event(d.tabId, 'phishing', host);
+    blockedPages.set(d.tabId, d.url);
+    const q = new URLSearchParams({ reason: 'lookalike', brand: hit.brand, real: hit.real, why: hit.reason, shown: toUnicode(host) });
+    chrome.tabs.update(d.tabId, { url: `${EXT_ORIGIN}blocked/blocked.html?${q}#${encodeURIComponent(d.url)}` }).catch(() => {});
+}
+chrome.webNavigation.onBeforeNavigate.addListener((d) => { checkLookalike(d).catch(() => {}); });
+
+chrome.webRequest.onBeforeRedirect.addListener((d) => {
+    if (d.type === 'main_frame' && d.url.startsWith('http://') && d.redirectUrl.startsWith('https://') && /Internal Redirect/i.test(d.statusLine || '')) upgraded.set(d.tabId, d.url);
+}, { urls: ['http://*/*'] });
+chrome.webNavigation.onErrorOccurred.addListener(async (d) => {
+    if (d.frameId !== 0) return;
+    const http = upgraded.get(d.tabId);
+    if (!http || hostOf(http) !== hostOf(d.url) || /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT/.test(d.error)) return;
+    upgraded.delete(d.tabId);
+    // The site has no working HTTPS: allow plain HTTP for it this session
+    const rules = await DNR.getSessionRules();
+    const id = rules.reduce((n, r) => Math.max(n, r.id), 0) + 1;
+    await DNR.updateSessionRules({ addRules: [{ id, priority: 2, action: { type: 'allow' }, condition: { requestDomains: [hostOf(http)], resourceTypes: ['main_frame', 'sub_frame'] } }] }).catch(() => {});
+    chrome.tabs.update(d.tabId, { url: http }).catch(() => {});
+});
+
+// ---------------------------------------------------------------------------
+// Forget sites when you leave: cookies + storage of sites with no open tab (unless kept or allowlisted)
+// ---------------------------------------------------------------------------
+const tabSites = new Map();          // tabId -> base domain
+const visited = new Set();           // base domains seen this session
+function siteOf(url) { const h = hostOf(url); return /^https?:/.test(url) && h ? baseOf(h) : ''; }
+async function forgetCheck() {
+    const { tweaks, disabledSites } = await settings();
+    if (!tweaks.forget) return;
+    const open = new Set((await chrome.tabs.query({})).map((t) => siteOf(t.url || t.pendingUrl || '')).filter(Boolean));
+    const keep = new Set([...tweaks.keepSites, ...disabledSites].map((s) => baseOf(s)));
+    const gone = [...visited].filter((s) => !open.has(s) && !keep.has(s));
+    if (!gone.length) return;
+    const canCookies = await chrome.permissions.contains({ permissions: ['cookies'] }).catch(() => false);
+    const canData = await chrome.permissions.contains({ permissions: ['browsingData'] }).catch(() => false);
+    for (const site of gone) {
+        visited.delete(site);
+        try {
+            if (canCookies) {
+                for (const c of await chrome.cookies.getAll({ domain: site })) {
+                    const url = `http${c.secure ? 's' : ''}://${c.domain.replace(/^\./, '')}${c.path}`;
+                    await chrome.cookies.remove({ url, name: c.name, storeId: c.storeId }).catch(() => {});
+                }
+            }
+            if (canData) {
+                const types = { localStorage: true, indexedDB: true, cacheStorage: true, serviceWorkers: true };
+                if (IS_FIREFOX) await chrome.browsingData.remove({ hostnames: [site, `www.${site}`] }, { localStorage: true, cookies: true }).catch(() => {});
+                else await chrome.browsingData.remove({ origins: [`https://${site}`, `https://www.${site}`, `http://${site}`, `http://www.${site}`] }, types).catch(() => {});
+            }
+            stats.event(-1, 'cleaned', site);
+        } catch (e) { logError('forget', e); }
+    }
+}
+let forgetTimer = 0;
+const scheduleForget = () => { clearTimeout(forgetTimer); forgetTimer = setTimeout(() => forgetCheck().catch(() => {}), 15_000); };
+chrome.tabs.onRemoved.addListener(() => scheduleForget());
+chrome.webNavigation.onCommitted.addListener((d) => {
+    if (d.frameId !== 0) return;
+    const site = siteOf(d.url);
+    const prev = tabSites.get(d.tabId);
+    if (site) { tabSites.set(d.tabId, site); visited.add(site); }
+    if (prev && prev !== site) scheduleForget();
+});
+
+// ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
 const handlers = {
@@ -690,7 +888,7 @@ const handlers = {
             chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] }).catch(() => true)
         ]);
         return {
-            host,
+            host, url,
             web: /^https?:/.test(url),
             hasAccess,
             disabled: s.disabledSites.some((x) => hostChain(host).includes(x)),
@@ -705,6 +903,59 @@ const handlers = {
         };
     },
     'update:check': () => checkForUpdate(),
+    'guard:init': async (m, sender) => {
+        const host = hostOf(sender.tab?.url || sender.url || '');
+        if (await isDisabled(host)) return { off: true };
+        const { tweaks } = await settings();
+        return { httpWarn: tweaks.httpWarn, amp: tweaks.amp, unwrap: tweaks.unwrap ? UNWRAP.map(({ re, params }) => ({ re, params })) : [] };
+    },
+    'guard:fp': ({ api }, sender) => { stats.event(sender.tab?.id ?? -1, 'fp', String(api).slice(0, 20)); return true; },
+    'guard:event': ({ kind }, sender) => {
+        const map = { unwrap: 'unwrapped', amp: 'amp', sponsor: 'sponsor', 'insecure-password': 'phishing' };
+        if (map[kind]) stats.event(sender.tab?.id ?? -1, map[kind], hostOf(sender.tab?.url || ''));
+        return true;
+    },
+    'blocked:trust': ({ url }) => { const h = hostOf(url); if (h) trustedHosts.add(h); return true; },
+    'unwrap:bypass': async ({ url }) => {
+        const host = hostOf(url);
+        if (!host) return false;
+        const rules = await DNR.getSessionRules();
+        const id = rules.reduce((n, r) => Math.max(n, r.id), 0) + 1;
+        await DNR.updateSessionRules({ addRules: [{ id, priority: PRIORITY.siteDisabled, action: { type: 'allow' }, condition: { requestDomains: [host], resourceTypes: ['main_frame'] } }] });
+        setTimeout(() => DNR.updateSessionRules({ removeRuleIds: [id] }).catch(() => {}), 60_000);
+        return true;
+    },
+    'site:permissions': async ({ tabId }) => {
+        const res = await chrome.scripting.executeScript({
+            target: { tabId }, injectImmediately: true,
+            func: async () => {
+                const out = {};
+                for (const name of ['camera', 'microphone', 'geolocation', 'notifications']) {
+                    try { out[name] = (await navigator.permissions.query({ name })).state; } catch { out[name] = 'unknown'; }
+                }
+                return out;
+            }
+        }).catch(() => null);
+        return { perms: res?.[0]?.result || null, canRevoke: !!chrome.contentSettings || (!IS_FIREFOX) };
+    },
+    'site:revoke': async ({ url, name }) => {
+        if (!chrome.contentSettings) return { error: 'needs-permission' };
+        const pattern = `${new URL(url).origin}/*`;
+        const key = { camera: 'camera', microphone: 'microphone', geolocation: 'location', notifications: 'notifications' }[name];
+        if (!key || !chrome.contentSettings[key]) return { error: 'unsupported' };
+        await chrome.contentSettings[key].set({ primaryPattern: pattern, setting: 'block' });
+        return { ok: true };
+    },
+    'forget:now': async () => { visited.clear(); for (const t of await chrome.tabs.query({})) { const s = siteOf(t.url || ''); if (s) visited.add(s); } await forgetCheck(); return true; },
+    'dashboard:state': async ({ tabId }) => ({
+        stats: tabId != null ? stats.summary(tabId) : null,
+        recent: tabId != null ? stats.recent(tabId) : [],
+        top: tabId != null ? stats.topHosts(tabId, 12) : [],
+        totals: await stats.totals(),
+        history: await stats.history(),
+        host: tabId != null ? hostOf((await chrome.tabs.get(tabId).catch(() => null))?.url || '') : ''
+    }),
+    'hotfix:info': async () => ({ ...(await chrome.storage.local.get('hotfix')).hotfix, rules: (await hotfixData()).ok }),
     // Elements hidden on the page: injected immediately (doesn't wait for the page to finish loading)
     'popup:hidden': async ({ tabId }) => {
         const count = chrome.scripting.executeScript({

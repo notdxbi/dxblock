@@ -1,3 +1,5 @@
+import { TrackerWeb, LiveChart, grade, GRADE_COLORS } from '../ui/graph.js';
+
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg).catch(() => null);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -6,10 +8,14 @@ const forced = Number(new URLSearchParams(location.search).get('tab'));  // used
 const [tab] = forced ? [{ id: forced }] : await chrome.tabs.query({ active: true, currentWindow: true });
 
 const KIND = {
-    ad: ['AD', 'var(--accent-2)'], stealth: ['AD', 'var(--accent-2)'], tracker: ['TRK', 'var(--tracker)'],
-    threat: ['RISK', 'var(--threat)'], popup: ['POP', 'var(--popup)'], param: ['URL', '#8d8d99']
+    ad: 'AD', stealth: 'AD', tracker: 'TRK', threat: 'RISK', popup: 'POP', param: 'URL',
+    fp: 'FP', phishing: 'WARN', unwrapped: 'LINK', amp: 'AMP', sponsor: 'SKIP', cleaned: 'WIPE'
 };
 const fmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}k` : (n || 0).toLocaleString());
+
+const web = new TrackerWeb($('web'), { reduced, maxNodes: 30 });
+const chart = new LiveChart($('chart'));
+setInterval(() => { $('rate').textContent = chart.rate().toFixed(1); }, 1000);
 
 // ---------------------------------------------------------------------------
 // Animated numbers
@@ -36,33 +42,10 @@ function flash(cls) {
 }
 
 // ---------------------------------------------------------------------------
-// Radar
+// Live feed / companies / this site
 // ---------------------------------------------------------------------------
-const blips = $('blips');
-const radar = document.querySelector('.radar');
-let hitTimer = 0;
-function blip(kind) {
-    if (reduced) return;
-    const angle = Math.random() * Math.PI * 2;
-    const r = 0.36 + Math.random() * 0.12;
-    const el = document.createElement('i');
-    el.className = 'blip';
-    el.style.left = `${50 + Math.cos(angle) * r * 100}%`;
-    el.style.top = `${50 + Math.sin(angle) * r * 100}%`;
-    el.style.setProperty('--c', (KIND[kind] || KIND.ad)[1]);
-    blips.append(el);
-    setTimeout(() => el.remove(), 2500);
-    radar.classList.add('hit');
-    clearTimeout(hitTimer);
-    hitTimer = setTimeout(() => radar.classList.remove('hit'), 280);
-}
-
-// ---------------------------------------------------------------------------
-// Feed + top blocked
-// ---------------------------------------------------------------------------
-const feed = $('feed');
-const top = $('top');
-const seen = new Set();          // events already in the feed (key: time + host)
+const live = $('live');
+const seen = new Set();
 const ago = (t) => {
     const s = Math.max(0, Math.round((Date.now() - t) / 1000));
     return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`;
@@ -71,75 +54,123 @@ function feedItem(ev, animateIn = true) {
     const key = `${ev.t}|${ev.host}|${ev.kind}`;
     if (seen.has(key)) return false;
     seen.add(key);
-    feed.querySelector('.empty')?.remove();
+    live.querySelector('.empty')?.remove();
     const li = document.createElement('li');
     if (!animateIn) li.style.animation = 'none';
-    li.innerHTML = '<span class="tag"></span><span class="fhost"></span><span class="ftime"></span>';
+    li.innerHTML = '<span class="tag"></span><span class="fhost"></span><span class="fco"></span><span class="ftime"></span>';
     const tag = li.querySelector('.tag');
-    tag.textContent = (KIND[ev.kind] || KIND.ad)[0];
+    tag.textContent = KIND[ev.kind] || 'AD';
     tag.classList.add(ev.kind);
-    li.querySelector('.fhost').textContent = ev.host;
+    li.querySelector('.fhost').textContent = ev.kind === 'fp' ? `${ev.host} fingerprinting` : ev.host;
+    li.querySelector('.fco').textContent = ev.company || '';
     const time = li.querySelector('.ftime');
     time.textContent = ago(ev.t);
     time.dataset.t = ev.t;
-    feed.prepend(li);
-    while (feed.children.length > 8) feed.lastElementChild.remove();
+    live.prepend(li);
+    while (live.children.length > 9) live.lastElementChild.remove();
     return true;
 }
-setInterval(() => feed.querySelectorAll('.ftime').forEach((el) => { el.textContent = ago(Number(el.dataset.t)); }), 1000);
+setInterval(() => live.querySelectorAll('.ftime').forEach((el) => { el.textContent = ago(Number(el.dataset.t)); }), 1000);
 
-function renderTop(list) {
-    if (!list?.length) { top.innerHTML = '<li class="empty">Nothing blocked yet on this page</li>'; return; }
+function renderCompanies(stats) {
+    const list = Object.entries(stats?.companies || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const el = $('companies');
+    if (!list.length) { el.innerHTML = '<li class="empty">No tracking companies seen yet</li>'; return; }
     const max = list[0][1];
-    top.innerHTML = '';
-    for (const [host, n] of list) {
+    el.innerHTML = '';
+    for (const [name, n] of list) {
         const li = document.createElement('li');
         li.innerHTML = '<div class="bar"><i></i><span></span></div><b></b>';
-        li.querySelector('span').textContent = host;
+        li.querySelector('span').textContent = name;
         li.querySelector('b').textContent = n;
-        top.append(li);
-        requestAnimationFrame(() => { li.querySelector('i').style.width = `${Math.max(8, (n / max) * 100)}%`; });
+        el.append(li);
+        requestAnimationFrame(() => { li.querySelector('i').style.width = `${Math.max(10, (n / max) * 100)}%`; });
     }
 }
-document.querySelectorAll('.ftab').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('.ftab').forEach((x) => x.classList.toggle('on', x === b));
-    feed.hidden = b.dataset.view !== 'live';
-    top.hidden = b.dataset.view !== 'top';
-}));
 
-// ---------------------------------------------------------------------------
-// Render
-// ---------------------------------------------------------------------------
 let state = null;
+function renderGrade(s) {
+    const https = !/^http:/.test(state?.url || '');
+    const g = grade(s, https);
+    $('grade-l').textContent = g.letter;
+    $('grade').style.setProperty('--g', GRADE_COLORS[g.letter]);
+    const parts = [];
+    if (s.trackers) parts.push(`${s.trackers} tracker${s.trackers === 1 ? '' : 's'}`);
+    if (g.companies) parts.push(`${g.companies} compan${g.companies === 1 ? 'y' : 'ies'}`);
+    if (s.ads) parts.push(`${s.ads} ad request${s.ads === 1 ? '' : 's'}`);
+    if (s.fp) parts.push(`${s.fp} fingerprinting attempt${s.fp === 1 ? '' : 's'}`);
+    if (s.popups) parts.push(`${s.popups} pop-up${s.popups === 1 ? '' : 's'}`);
+    $('site-summary').innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = `Privacy grade ${g.letter}. `;
+    $('site-summary').append(b, parts.length ? `This site tried to load ${parts.join(', ')}. All of it was stopped.` : 'Nothing has tried to track you here yet.');
+}
+
 function renderStats(s, opts = {}) {
     if (!s) return;
     animate($('count'), s.blocked, opts);
     animate($('s-ads'), s.ads);
     animate($('s-trackers'), s.trackers);
-    animate($('s-popups'), s.popups);
-    $('params').textContent = s.params ? `${s.params} link tracker${s.params === 1 ? '' : 's'} removed` : '';
+    animate($('s-companies'), Object.keys(s.companies || {}).length);
+    animate($('s-fp'), s.fp);
+    renderGrade(s);
+    renderCompanies(s);
 }
+
 function renderSite() {
-    const web = state.web;
-    $('host').textContent = web ? state.host.replace(/^www\./, '') : 'This page can’t be scanned';
+    const onWeb = state.web;
+    $('host').textContent = onWeb ? state.host.replace(/^www\./, '') : 'This page can’t be scanned';
     $('power').checked = !state.disabled;
     $('site-title').textContent = state.disabled ? 'Protection paused' : 'Protection on';
     $('site-sub').textContent = state.disabled ? 'Everything is allowed on this site' : 'Blocking ads & trackers on this site';
-    $('status-text').textContent = !web ? 'Idle' : state.disabled ? 'Paused' : 'Live';
+    $('status-text').textContent = !onWeb ? 'Idle' : state.disabled ? 'Paused' : 'Live';
     document.body.classList.toggle('paused', state.disabled);
-    document.body.classList.toggle('na', !web);
+    document.body.classList.toggle('na', !onWeb);
+    web.paused = state.disabled || !onWeb;
     $('access').hidden = state.hasAccess !== false;
     $('update').hidden = !state.update;
     if (state.update) { $('update').href = state.update.url; $('update-v').textContent = `v${state.update.version}`; }
     const proxy = state.tweaks?.proxy?.mode !== 'off' ? ' · IP hidden' : '';
     $('footer').textContent = `${fmt(state.totals.blocked)} blocked all-time · ${state.lists} lists · ${fmt(state.rules)} filters${proxy}`;
 }
+
 async function refreshHidden() {
     if (!state?.web || state.disabled) return;
     const n = await send({ type: 'popup:hidden', tabId: tab.id });
     if (typeof n === 'number' && n !== shown.get($('s-hidden'))) {
         if (shown.has($('s-hidden'))) flash('hidden');
         animate($('s-hidden'), n);
+    }
+}
+
+async function loadPerms() {
+    if (!state?.web) return;
+    const r = await send({ type: 'site:permissions', tabId: tab.id });
+    const box = $('perms');
+    box.innerHTML = '';
+    if (!r?.perms) return;
+    const NAMES = { camera: 'Camera', microphone: 'Microphone', geolocation: 'Location', notifications: 'Notifications' };
+    for (const [k, v] of Object.entries(r.perms)) {
+        const d = document.createElement('div');
+        d.className = 'perm';
+        d.innerHTML = '<span></span><em></em>';
+        d.querySelector('span').textContent = NAMES[k] || k;
+        const em = d.querySelector('em');
+        em.textContent = v === 'granted' ? 'allowed' : v === 'denied' ? 'blocked' : 'ask';
+        if (v === 'granted') {
+            em.className = 'granted';
+            if (r.canRevoke) {
+                const btn = Object.assign(document.createElement('button'), { textContent: 'Revoke' });
+                btn.addEventListener('click', async () => {
+                    const ok = await chrome.permissions.request({ permissions: ['contentSettings'] }).catch(() => false);
+                    if (!ok) return;
+                    const res = await send({ type: 'site:revoke', url: state.url, name: k });
+                    if (res?.ok) { em.textContent = 'blocked'; em.className = ''; btn.remove(); }
+                });
+                d.append(btn);
+            }
+        }
+        box.append(d);
     }
 }
 
@@ -150,21 +181,19 @@ async function load(first) {
     state = s;
     renderSite();
     if (fresh) {
-        for (const ev of [...s.recent].reverse().slice(-8)) feedItem(ev, false);
-        if (!reduced && s.web && !s.disabled) {
-            radar.classList.add('fast');
-            setTimeout(() => radar.classList.remove('fast'), 1100);
-            s.recent.slice(0, 6).forEach((ev, i) => setTimeout(() => blip(ev.kind), 120 + i * 140));
-        }
+        const recent = [...s.recent].reverse();
+        for (const ev of recent.slice(-9)) feedItem(ev, false);
+        for (const ev of recent) seen.add(`${ev.t}|${ev.host}|${ev.kind}`);
+        // Replay the page's blocks into the web so it fills up when the popup opens
+        recent.slice(-30).forEach((ev, i) => setTimeout(() => web.add(ev), reduced ? 0 : 60 + i * 55));
+        chart.seed(s.recent);
         renderStats(s.stats, { duration: 1100 });
     } else {
-        // Fallback when the live port missed something: add new events, update numbers
         let added = 0;
-        for (const ev of [...s.recent].reverse()) if (feedItem(ev)) { added++; if (added <= 4) blip(ev.kind); }
+        for (const ev of [...s.recent].reverse()) if (feedItem(ev)) { added++; web.add(ev); chart.hit(); }
         renderStats(s.stats, { bump: added > 0, duration: 400 });
     }
-    renderTop(s.top);
-    if (first) refreshHidden();
+    if (first) { refreshHidden(); loadPerms(); }
 }
 await load(true);
 
@@ -174,25 +203,27 @@ try {
     port.postMessage({ type: 'watch', tabId: tab.id });
     port.onMessage.addListener((m) => {
         if (m.type === 'event') {
-            if (feedItem(m.ev)) blip(m.ev.kind);
+            if (feedItem(m.ev)) { web.add(m.ev); if (m.ev.kind !== 'param') chart.hit(); }
             renderStats(m.stats, { bump: m.ev.kind !== 'param', duration: 400 });
-            if (m.top) renderTop(m.top);
-            flash({ tracker: 'tracker', popup: 'popup' }[m.ev.kind] || 'ad');
+            flash({ tracker: 'tracker', fp: 'fp' }[m.ev.kind] || 'ad');
         } else if (m.type === 'reset') {
-            feed.innerHTML = '<li class="empty">Scanning the new page…</li>';
+            live.innerHTML = '<li class="empty">Scanning the new page…</li>';
             seen.clear();
             renderStats(m.stats, { duration: 300 });
-            renderTop([]);
             shown.set($('s-hidden'), 0); $('s-hidden').textContent = '0';
         }
     });
-} catch { /* the polling below still keeps it current */ }
+} catch { /* polling below keeps it current */ }
 setInterval(() => load(false), 1500);
 setInterval(refreshHidden, 2000);
 
-// ---------------------------------------------------------------------------
+// Tabs
+document.querySelectorAll('.ftab').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.ftab').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== b.dataset.view; });
+}));
+
 // Actions
-// ---------------------------------------------------------------------------
 $('power').addEventListener('change', async (e) => {
     state.disabled = !e.target.checked;
     renderSite();
@@ -200,8 +231,22 @@ $('power').addEventListener('change', async (e) => {
     chrome.tabs.reload(tab.id);
     setTimeout(() => window.close(), 350);
 });
-$('pick').addEventListener('click', async () => {
-    await send({ type: 'picker:start', tabId: tab.id });
+$('pick').addEventListener('click', async () => { await send({ type: 'picker:start', tabId: tab.id }); window.close(); });
+$('dashboard').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard/dashboard.html?tab=${tab.id}`) });
+    window.close();
+});
+$('report').addEventListener('click', () => {
+    const info = state || {};
+    const q = new URLSearchParams({
+        template: 'problem.yml',
+        title: `Problem on ${info.host || 'a site'}`,
+        site: info.host || '',
+        version: chrome.runtime.getManifest().version,
+        browser: navigator.userAgent,
+        lists: String(info.lists || '')
+    });
+    chrome.tabs.create({ url: `https://github.com/notdxbi/dxblock/issues/new?${q}` });
     window.close();
 });
 $('settings').addEventListener('click', () => { chrome.runtime.openOptionsPage(); window.close(); });

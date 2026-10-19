@@ -67,11 +67,40 @@
       </div>
     </div>
 
-    <div class="group"><h2>Protection tweaks</h2>
-      <label class="list"><div class="info"><div class="name">Stop IP leaks (WebRTC)</div><div class="meta">Stops websites from discovering your real and local IP through WebRTC, even behind a VPN or proxy. Video calls still work.</div></div><span class="switch"><input type="checkbox" data-tweak="webrtc"><span></span></span></label>
+    <div class="group"><h2>Tracking protection</h2>
+      <label class="list"><div class="info"><div class="name">Anti-fingerprinting</div><div class="meta">Adds invisible noise to the canvas, WebGL, audio and font checks sites use to identify you without cookies, and hides your exact hardware. Brave already does this; it matters most on Chrome and Firefox.</div></div><span class="switch"><input type="checkbox" data-tweak="fingerprint"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Block third-party cookies</div><div class="meta">Other companies' scripts, images and pixels can't read or set cookies, so they can't follow you from site to site. Embedded videos and logins inside frames keep working.</div></div><span class="switch"><input type="checkbox" data-tweak="cookies3p"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Block tracking beacons</div><div class="meta">Stops the hidden "someone clicked / left the page" pings that sites send to other companies.</div></div><span class="switch"><input type="checkbox" data-tweak="beacons"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Skip tracking links</div><div class="meta">Links through google.com/url, l.facebook.com, out.reddit.com, LinkedIn, VK, DuckDuckGo and others go straight to the real site, so nobody logs what you clicked.</div></div><span class="switch"><input type="checkbox" data-tweak="unwrap"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Skip AMP pages</div><div class="meta">Google AMP pages open as the publisher's real page instead of Google's cached copy.</div></div><span class="switch"><input type="checkbox" data-tweak="amp"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Tell sites not to sell or share my data</div><div class="meta">Sends the Global Privacy Control and Do Not Track signals. GPC is a legal opt-out in California and recognised under GDPR.</div></div><span class="switch"><input type="checkbox" data-tweak="gpc"><span></span></span></label>
-      <label class="list"><div class="info"><div class="name">Hide where you came from</div><div class="meta">Removes the referrer from requests to other companies' servers, so trackers and CDNs don't learn which page you were on. Rarely, an image host may refuse to load.</div></div><span class="switch"><input type="checkbox" data-tweak="referrer"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Hide where you came from</div><div class="meta">Removes the referrer from requests to other companies' servers. Rarely, an image host may refuse to load.</div></div><span class="switch"><input type="checkbox" data-tweak="referrer"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Blend in (timezone &amp; language)</div><div class="meta">Sites see UTC and US English instead of your real timezone and languages, like Tor Browser. Best together with a proxy. Clocks on some sites will show UTC.</div></div><span class="switch"><input type="checkbox" data-tweak="blend"><span></span></span></label>
+    </div>
+
+    <div class="group"><h2>Browsing safety</h2>
+      <label class="list"><div class="info"><div class="name">Warn about fake sites</div><div class="meta">Spots look-alike domains imitating PayPal, banks, Microsoft, Steam, Discord and 90 other brands (paypa1.com, раypal.com with a Cyrillic "а", paypal.com.account-check.xyz) and stops before the page loads.</div></div><span class="switch"><input type="checkbox" data-tweak="lookalike"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Warn before typing passwords on insecure pages</div><div class="meta">Shows a warning when you click a password box on a page that isn't encrypted (http).</div></div><span class="switch"><input type="checkbox" data-tweak="httpWarn"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">HTTPS-only</div><div class="meta">Every connection is upgraded to encrypted HTTPS. If a site has no HTTPS, dx.block falls back to the plain version for that site.</div></div><span class="switch"><input type="checkbox" data-tweak="httpsOnly"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Stop IP leaks (WebRTC)</div><div class="meta">Stops websites from discovering your real and local IP through WebRTC, even behind a VPN or proxy. Video calls still work.</div></div><span class="switch"><input type="checkbox" data-tweak="webrtc"><span></span></span></label>
+    </div>
+
+    <div class="group"><h2>Clean up</h2>
+      <div class="card">
+        <div class="row-head">
+          <div><div class="name">Forget sites when I leave</div>
+          <div class="meta">When the last tab of a site closes, its cookies and stored data are deleted after 15 seconds, so it can't recognise you next time. Sites below (and sites where dx.block is switched off) are kept, so you stay logged in.</div></div>
+          <span class="switch"><input type="checkbox" id="forget"><span></span></span>
+        </div>
+        <div class="fields"><label class="grow">Sites to keep (one per line)<textarea id="keep" class="small-area" spellcheck="false" placeholder="google.com&#10;github.com"></textarea></label></div>
+        <div class="bar"><button id="keep-save" class="primary">Save</button><button id="forget-now">Clean closed sites now</button><span id="forget-status" class="muted"></span></div>
+      </div>
+    </div>
+
+    <div class="group"><h2>Extras</h2>
+      <label class="list"><div class="info"><div class="name">Skip YouTube sponsor segments</div><div class="meta">Jumps over sponsor reads, self-promotion and "like and subscribe" reminders using the community SponsorBlock database. Only a 4-character hash prefix of the video is sent, so the service can't tell what you watch.</div></div><span class="switch"><input type="checkbox" data-tweak="sponsorblock"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Block "Allow notifications?" prompts</div><div class="meta">Websites can't ask to send you push notifications. Sites you already allowed keep working.</div></div><span class="switch"><input type="checkbox" data-tweak="notifications"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Fast fixes</div><div class="meta" id="hotfix-meta">A few times a day, downloads a small list of fixes from the dx.block repository so new ads and broken sites get fixed without waiting for an update (filter data only, never code).</div></div><span class="switch"><input type="checkbox" data-tweak="hotfix"><span></span></span></label>
     </div>
   </section>
 

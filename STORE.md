@@ -30,7 +30,9 @@ dx.block blocks ads, trackers, pop-ups and malware on every site, using the same
 - `webRequestAuthProvider`: answer the username/password prompt of a proxy the user configured.
 - `privacy`: WebRTC IP-leak protection.
 - `proxy`: optional "Hide your IP" feature routing traffic through a proxy the user enters.
-- `alarms`: the daily update check.
+- `alarms`: the daily update check and the fast-fix list refresh.
+- Optional `cookies` + `browsingData` (asked only when the user turns on "Forget sites when I leave"): delete a site's cookies and storage after its last tab closes.
+- Optional `contentSettings` (asked only when the user clicks "Revoke" on a site permission): block camera / microphone / location / notifications for that site.
 - Host permission `<all_urls>`: ads appear on every site; the extension needs to block and hide them wherever the user browses.
 
 **Remote code:** No. All code and filter data ship inside the package. The only remote request is a daily version check against the GitHub API (can be disabled).

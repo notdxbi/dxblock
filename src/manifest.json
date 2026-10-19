@@ -53,6 +53,16 @@
       "run_at": "document_start",
       "all_frames": true,
       "match_origin_as_fallback": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/guard.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [
@@ -64,11 +74,24 @@
         "<all_urls>"
       ],
       "use_dynamic_url": true
+    },
+    {
+      "resources": [
+        "unwrap/unwrap.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "commands": {
     "pick-element": {
       "description": "Block an element on this page"
     }
-  }
+  },
+  "optional_permissions": [
+    "cookies",
+    "browsingData",
+    "contentSettings"
+  ]
 }

@@ -37,6 +37,9 @@ export const LISTS = [
     { id: 'urlhaus', cat: 'security', name: 'Malicious URL blocklist', desc: 'Active malware URLs (URLhaus)', group: 'ads', on: true,
       url: 'https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-ag-online.txt', home: 'https://gitlab.com/malware-filter/urlhaus-filter' },
 
+    { id: 'phishing', cat: 'security', document: true, name: 'Phishing URL blocklist', desc: 'Active phishing sites (OpenPhish & PhishTank data)', group: 'ads', on: true,
+      url: 'https://malware-filter.gitlab.io/malware-filter/phishing-filter-agh.txt', home: 'https://gitlab.com/malware-filter/phishing-filter' },
+
     // --- Annoyances (cookie banners + pop-up nags on; Fanboy's heavier list off) ---------------------------------------
     { id: 'ubo-cookies', cat: 'annoyances', name: 'uBlock cookie notices', desc: 'Hides cookie consent banners', group: 'annoyances', on: true, trusted: true,
       url: 'https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt', home: 'https://github.com/uBlockOrigin/uAssets' },

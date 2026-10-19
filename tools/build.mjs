@@ -296,6 +296,10 @@ async function main() {
             }
         }
 
+        // Lists of dangerous sites also block opening them (shows the warning page)
+        if (list.document) for (const r of rules) {
+            if (r.action.type === 'block' && !r.condition.resourceTypes) r.condition.resourceTypes = ['main_frame', 'sub_frame', 'script', 'image', 'stylesheet', 'xmlhttprequest', 'font', 'media', 'object', 'other', 'ping', 'websocket'];
+        }
         // Merge, validate, number
         let merged = stealthSplit(mergeRules(rules));
         let regex = 0;
@@ -521,6 +525,7 @@ function buildFirefox(chromeManifest) {
         update_url: 'https://raw.githubusercontent.com/notdxbi/dxblock/main/updates/firefox.json'
     } };
     m.permissions = m.permissions.filter((p) => p !== 'webRequestAuthProvider').concat('webRequestBlocking');
+    m.optional_permissions = (m.optional_permissions || []).filter((p) => p !== 'contentSettings');
     for (const cs of m.content_scripts) delete cs.match_origin_as_fallback;
     for (const w of m.web_accessible_resources) delete w.use_dynamic_url;
     delete m.minimum_chrome_version;

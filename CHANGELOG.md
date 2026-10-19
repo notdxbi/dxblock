@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+- Live tracker web: blocked requests fly in, get grabbed and pinned to the company behind them (popup + full-screen dashboard)
+- Full-screen dashboard with live chart, company breakdown, privacy grade, protection status and weekly privacy report
+- Anti-fingerprinting (canvas, WebGL, audio, fonts, hardware), with attempts shown in the popup
+- Third-party cookie and tracking-beacon blocking; tracking-link unwrapping; AMP skipping
+- Fake-site (look-alike / homograph) warnings, phishing blocklist, insecure-password warning, optional HTTPS-only
+- Forget sites when you leave, blend-in mode (timezone & language), site permission auditor, SponsorBlock (opt-in)
+- Fast fixes fetched from the repo, Report-a-problem button with a GitHub issue form
+
 ## 1.1.0
 - 100% on superadblocktest.com and 132/132 on adblock.turtlecute.org (Brave, Chrome and Firefox)
 - Live dashboard popup: radar, per-page counts, live feed, top blocked domains, toolbar badge

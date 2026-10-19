@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dx.block · Live dashboard</title>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><svg class="mark" viewBox="0 0 128 128" aria-hidden="true"><path d="M64 10 L108 26 V62 C108 90 89 108 64 118 C39 108 20 90 20 62 V26 Z"/></svg><span class="logo">dx<b>.</b>block</span><span class="sub">live dashboard</span></div>
+  <div class="watch"><span class="dot"></span><span id="watching">Watching —</span></div>
+  <a class="btn" href="../options/options.html">Settings</a>
+</header>
+
+<main>
+  <section class="stage card">
+    <canvas id="web" aria-label="Live map of blocked trackers, grouped by company"></canvas>
+    <div class="stage-head">
+      <div><b id="count">0</b><span>blocked on this page</span></div>
+      <div class="legend">
+        <span><i style="--c:#ff3b45"></i>Ads</span><span><i style="--c:#a970ff"></i>Trackers</span><span><i style="--c:#ffb020"></i>Threats</span><span><i style="--c:#2fb7ff"></i>Pop-ups</span><span><i style="--c:#ff6b9a"></i>Fingerprinting</span><span><i style="--c:#22d38a"></i>Privacy actions</span>
+      </div>
+    </div>
+    <p class="stage-hint">Every dot is a request dx.block stopped, pinned to the company behind it. Hover a dot for details.</p>
+  </section>
+
+  <aside class="side">
+    <div class="card grade-card">
+      <div class="grade-badge" id="grade"><b id="grade-l">A</b></div>
+      <div><h3>Site privacy grade</h3><p id="grade-text" class="muted">How hard this site tried to track you. Everything was stopped.</p></div>
+    </div>
+    <div class="card">
+      <h3>Blocked per second <span class="muted" id="rate">0.0/s</span></h3>
+      <canvas id="chart" class="chart"></canvas>
+    </div>
+    <div class="card counters">
+      <div><b id="c-ads">0</b><span>Ads</span></div>
+      <div><b id="c-trackers">0</b><span>Trackers</span></div>
+      <div><b id="c-companies">0</b><span>Companies</span></div>
+      <div><b id="c-fp">0</b><span>Fingerprint attempts</span></div>
+      <div><b id="c-popups">0</b><span>Pop-ups</span></div>
+      <div><b id="c-params">0</b><span>Link trackers</span></div>
+    </div>
+    <div class="card">
+      <h3>Who tried to track you</h3>
+      <ul id="companies" class="bars"></ul>
+    </div>
+  </aside>
+
+  <section class="card feed-card">
+    <h3><i class="live-dot"></i>Live activity</h3>
+    <ul id="feed" class="feed"><li class="empty">Waiting for activity on the watched tab…</li></ul>
+  </section>
+
+  <section class="card report">
+    <div class="report-head">
+      <h2>Your week in privacy</h2>
+      <span class="muted" id="week-range"></span>
+    </div>
+    <div class="report-grid">
+      <div class="big"><b id="w-blocked">0</b><span>requests blocked</span></div>
+      <div class="big"><b id="w-trackers">0</b><span>trackers stopped</span></div>
+      <div class="big"><b id="w-fp">0</b><span>fingerprinting attempts</span></div>
+      <div class="big"><b id="w-data">0 MB</b><span>data saved <em>(estimate)</em></span></div>
+      <div class="big"><b id="w-time">0 min</b><span>load time saved <em>(estimate)</em></span></div>
+    </div>
+    <div class="report-row">
+      <div class="week-chart"><canvas id="week" class="chart tall"></canvas><div class="days" id="days"></div></div>
+      <div class="week-top"><h3>Top trackers this week</h3><ul id="w-companies" class="bars"></ul></div>
+    </div>
+  </section>
+
+  <section class="card shields">
+    <h3>Protection status</h3>
+    <ul id="shields"></ul>
+  </section>
+</main>
+<footer class="foot muted">All of this is computed on your device. dx.block never sends your browsing anywhere.</footer>
+<script src="dashboard.js" type="module"></script>
+</body>
+</html>

@@ -261,6 +261,47 @@ if (sw) {
     check('element picker creates a filter', /localhost##/.test(picked.userFilters), picked.userFilters.trim());
     await msg({ type: 'options:save-filters', text: '' });
 
+    // Anti-fingerprinting: a canvas read and font probing are noised and reported
+    await page.goto(`http://localhost:${port}/`);
+    await page.waitForTimeout(800);
+    const fp = await page.evaluate(() => {
+        const c = document.createElement('canvas'); c.width = 220; c.height = 40;
+        const x = c.getContext('2d'); x.font = '18px Arial'; x.fillText('dx.block fingerprint test', 4, 26);
+        const a = c.toDataURL(); const b = c.toDataURL();
+        for (let i = 0; i < 300; i++) x.measureText('mmmmmmmmmmlli' + i);
+        return { consistent: a === b, patched: !/native code/.test(String(HTMLCanvasElement.prototype.toDataURL)) === false };
+    });
+    await page.waitForTimeout(800);
+    const fpState = await msg({ type: 'popup:state', tabId: pageTab });
+    check('anti-fingerprinting active and reported', fp.consistent && fpState.stats.fp >= 1, `fp attempts ${fpState.stats.fp}, same result within page ${fp.consistent}`);
+
+    // Tracking link unwrapping and AMP skipping
+    await page.goto('https://www.google.com/url?q=https://example.com/unwrapped&sa=D', { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    check('tracking redirect skipped (google.com/url)', page.url().startsWith('https://example.com/unwrapped'), page.url().slice(0, 80));
+    await page.goto('https://www.google.com/amp/s/example.com/amp-test', { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+    check('Google AMP page skipped', page.url().startsWith('https://example.com/amp-test'), page.url().slice(0, 80));
+
+    // Fake-site warning
+    await page.goto('http://paypa1.com/', { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+    check('look-alike site warning (paypa1.com)', page.url().includes('/blocked/blocked.html') && page.url().includes('reason=lookalike'), page.url().slice(0, 90));
+
+    // Privacy rules installed
+    const dyn = await sw.evaluate(async () => (await chrome.declarativeNetRequest.getDynamicRules()).map((r) => r.id));
+    check('privacy rules active (GPC, beacons, 3rd-party cookies, link unwrapping)', [9000, 9002, 9003, 9020].every((id) => dyn.includes(id)), `${dyn.length} dynamic rules`);
+
+    // Dashboard renders and shows data
+    const dash = await ctx.newPage();
+    await dash.setViewportSize({ width: 1400, height: 1500 });
+    await dash.goto(`chrome-extension://${extId}/dashboard/dashboard.html?tab=${pageTab}`);
+    await dash.waitForTimeout(2500);
+    const dashOk = await dash.evaluate(() => ({ count: document.getElementById('count').textContent, shields: document.querySelectorAll('#shields li.on').length }));
+    check('dashboard renders live data', dashOk.shields >= 8, JSON.stringify(dashOk));
+    await dash.screenshot({ path: path.join(os.tmpdir(), 'dxblock-dashboard.png') });
+    await dash.close();
+
     // UI screenshots for a visual check
     await ext.setViewportSize({ width: 1000, height: 1100 });
     await ext.reload();

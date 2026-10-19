@@ -40,7 +40,7 @@ jobs:
       - name: Install test (Chromium)
         run: node tools/test.mjs --quick
       - name: Validate Firefox build
-        run: npx web-ext lint --source-dir dist-firefox
+        run: npx web-ext lint --self-hosted --source-dir dist-firefox
       - run: npm run package
 
       - name: Sign Firefox build

@@ -1,0 +1,4 @@
+! Title: dx.block fast fixes
+! Fetched by every dx.block install a few times a day, so fixes reach users without waiting for a release.
+! Network and cosmetic filters only (scriptlet lines are ignored by the extension). Keep it small.
+!

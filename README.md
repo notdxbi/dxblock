@@ -8,7 +8,7 @@
   <a href="LICENSE"><img alt="GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-222?style=flat-square"></a>
 </p>
 
-<p align="center"><img src="docs/popup.png" width="300" alt="The dx.block popup: a live radar of what's being blocked"></p>
+<p align="center"><img src="docs/popup.png" width="300" alt="The dx.block popup: a live web of the trackers being caught"></p>
 
 ---
 
@@ -43,16 +43,30 @@ into the browser's native blocking engine. It also closes the gaps Manifest V3 l
 - **Link tracking** (`fbclid`, `gclid` and 300+ others) stripped from URLs
 - **Element picker**: right-click → *Block element…* to remove anything permanently
 
-**Privacy & IP**
-- **Hide your IP**: route browsing through Tor or your own SOCKS5/HTTP proxy or VPN, with a built-in *Check my IP*
-- **WebRTC leak protection** (on by default): sites can't discover your real IP, even behind a VPN
-- **Global Privacy Control / Do Not Track** opt-out signal (on by default)
-- Optional: strip third-party referrers, auto-deny "Allow notifications?" prompts
+**Privacy**
+- **Anti-fingerprinting**: invisible noise on canvas, WebGL, audio and font checks, plus generic hardware values, so sites can't identify you without cookies
+- **Third-party cookies and tracking beacons blocked**, so ad companies can't follow you between sites
+- **Tracking links skipped**: `google.com/url`, `l.facebook.com`, `out.reddit.com`, LinkedIn, VK, DuckDuckGo and more go straight to the real page; AMP pages open as the original
+- **Global Privacy Control / Do Not Track** opt-out signal
+- Optional: **Blend in** (sites see UTC and US English), strip third-party referrers, **forget sites when you leave** (cookies and storage deleted when the last tab closes, with a keep list)
 
-**Dashboard**
-- Animated live popup: a radar of what's being blocked right now, per-page counts (ads, trackers, hidden elements, pop-ups), a live feed and top blocked domains
-- Toolbar badge with the blocked count, all-time stats, one-click switch per site
-- Custom filters in Adblock Plus, uBlock Origin or AdGuard syntax, an allowlist, and a Diagnostics page for bug reports
+**Safety**
+- **Fake-site warnings**: look-alike domains imitating PayPal, banks, Microsoft, Steam, Discord and 90 more brands, including Cyrillic look-alike letters and `paypal.com.scam.xyz` tricks
+- **Phishing blocklist** (30,000 active phishing sites) and a malware URL list, with a warning screen
+- Warning before you type a password on an unencrypted page; optional **HTTPS-only** with automatic fallback
+- **Hide your IP** through Tor or your own SOCKS5/HTTP proxy or VPN (with *Check my IP*), and **WebRTC leak protection**
+- **Site permissions** at a glance (camera, microphone, location, notifications) with one-click revoke
+
+**See what's happening**
+- **Live tracker web** in the popup: every blocked request flies in, gets grabbed and is pinned to the company behind it (Google, Meta, Amazon, TikTok…), plus a blocked-per-second chart
+- **Privacy grade** (A–F) for each site, counts for ads, trackers, companies, fingerprinting attempts and hidden elements, a live feed and a company breakdown
+- **Full-screen dashboard** with a large labelled tracker map, live chart, "who tried to track you", protection status and a **weekly privacy report**
+- **Report a problem** button that opens a pre-filled GitHub issue (nothing is sent unless you submit it)
+- **Fast fixes**: a small fix list in this repo is fetched a few times a day, so new ads get fixed without waiting for a release
+- Optional **SponsorBlock**: skip sponsor segments on YouTube (privacy-preserving hash-prefix lookups)
+- Toolbar badge, all-time stats, one-click switch per site, custom filters (ABP / uBO / AdGuard syntax), allowlist, Diagnostics page
+
+<p align="center"><img src="docs/dashboard.png" width="100%" alt="The dx.block live dashboard"></p>
 
 <p align="center"><img src="docs/settings.png" width="49%" alt="Settings: filter lists"> <img src="docs/privacy.png" width="49%" alt="Settings: privacy and IP"></p>
 <p align="center"><img src="docs/welcome.png" width="49%" alt="Welcome page"> <img src="docs/blocked.png" width="49%" alt="Dangerous page warning"></p>

@@ -180,3 +180,30 @@ $('update-now').addEventListener('click', async () => {
     if (u) { const a = Object.assign(document.createElement('a'), { href: u.url, target: '_blank', rel: 'noopener', textContent: `Version ${u.version} is available: download` }); $('update-status').append(a); }
     else $('update-status').textContent = `You're up to date (v${data.version}).`;
 });
+
+// Forget sites when I leave (needs the optional cookies + browsingData permissions)
+$('forget').checked = !!tw.forget;
+$('keep').value = (tw.keepSites || []).join('\n');
+$('forget').addEventListener('change', async () => {
+    const st = $('forget-status');
+    if ($('forget').checked) {
+        const ok = await chrome.permissions.request({ permissions: ['cookies', 'browsingData'] }).catch(() => false);
+        if (!ok) { $('forget').checked = false; st.className = 'bad'; st.textContent = 'Permission needed to delete site data.'; return; }
+    }
+    await send({ type: 'tweaks:set', tweaks: { forget: $('forget').checked } });
+    st.className = 'ok'; st.textContent = $('forget').checked ? 'On: closed sites are forgotten' : 'Off';
+});
+$('keep-save').addEventListener('click', async () => {
+    const keepSites = [...new Set($('keep').value.split('\n').map((x) => x.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')).filter(Boolean))];
+    await send({ type: 'tweaks:set', tweaks: { keepSites } });
+    $('keep').value = keepSites.join('\n');
+    $('forget-status').className = 'ok'; $('forget-status').textContent = `${keepSites.length} site${keepSites.length === 1 ? '' : 's'} kept`;
+});
+$('forget-now').addEventListener('click', async () => {
+    if (!$('forget').checked) { $('forget-status').className = 'bad'; $('forget-status').textContent = 'Switch the feature on first.'; return; }
+    await send({ type: 'forget:now' });
+    $('forget-status').className = 'ok'; $('forget-status').textContent = 'Closed sites cleaned';
+});
+send({ type: 'hotfix:info' }).then((h) => {
+    if (h?.at) $('hotfix-meta').textContent += ` Last update ${new Date(h.at).toLocaleString()} (${h.rules} fixes).`;
+});
