@@ -217,12 +217,17 @@ function addCosmetic(g, e) {
 
 
 const isIp = (h) => /^\d+\.\d+\.\d+\.\d+$/.test(h);
+// `*://*.example.com/*` already matches example.com itself, and a host whose parent
+// domain is listed is covered by the parent's pattern (scriptlets walk parent domains).
+// Chrome's cost of loading registered scripts grows faster than linearly with the
+// pattern count (112k patterns froze the browser UI ~20s at startup), so keep it minimal.
 function matchPatterns(hosts) {
+    const set = new Set(hosts.filter(isHostname));
+    const covered = (h) => { for (let i = h.indexOf('.'); i >= 0; i = h.indexOf('.', i + 1)) if (set.has(h.slice(i + 1))) return true; return false; };
     const out = [];
-    for (const h of hosts) {
-        if (!isHostname(h)) continue;
-        out.push(`*://${h}/*`);
-        if (!isIp(h)) out.push(`*://*.${h}/*`);
+    for (const h of set) {
+        if (isIp(h)) out.push(`*://${h}/*`);
+        else if (!covered(h)) out.push(`*://*.${h}/*`);
     }
     return out;
 }

@@ -147,7 +147,7 @@ function entityChain(host) {
     return out;
 }
 const baseOf = (h) => h.split('.').slice(-2).join('.');
-const sitePatterns = (h) => [`*://${h}/*`, `*://*.${h}/*`];
+const sitePatterns = (h) => (/^[\d.]+$|:/.test(h) ? [`*://${h}/*`] : [`*://*.${h}/*`]);   // *.h also matches h
 
 async function isDisabled(host) {
     if (!host) return false;
@@ -328,10 +328,15 @@ async function syncContentScripts({ force = false } = {}) {
     const excludeMatches = s.disabledSites.flatMap(sitePatterns);
     const existing = await chrome.scripting.getRegisteredContentScripts();
     const ours = existing.filter((r) => r.id.startsWith(OUR_PREFIX));
-    const stamp = `${chrome.runtime.getManifest().version}|${[...groups].sort().join(',')}`;
+    // The pattern count catches a rebuilt registry under an unchanged version (unpacked installs)
+    const stamp = `${chrome.runtime.getManifest().version}|${[...groups].sort().join(',')}|${wanted.reduce((n, r) => n + r.matches.length, 0)}`;
     const { scriptStamp } = await chrome.storage.local.get('scriptStamp');
 
     if (!force && scriptStamp === stamp && ours.length === wanted.length) {
+        // Every registry write makes Chrome reprocess all registered patterns on the UI thread,
+        // so skip it entirely when nothing changed (the normal case at browser startup)
+        const same = ours.every((r) => (r.excludeMatches || []).join() === excludeMatches.join());
+        if (same) return;
         // Only the allowlist changed: update excludeMatches in place
         const updates = ours.map((r) => ({ id: r.id, excludeMatches }));
         if (updates.length) await chrome.scripting.updateContentScripts(updates).catch(() => syncContentScripts({ force: true }));
@@ -406,13 +411,18 @@ async function applyTweaks() {
     } catch (e) { logError('webrtc', e); }
 
     // Page-side scripts (GPC flag, notification blocker)
-    const existing = (await chrome.scripting.getRegisteredContentScripts()).filter((r) => r.id.startsWith('dxbt-')).map((r) => r.id);
-    if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing }).catch(() => {});
+    const registered = (await chrome.scripting.getRegisteredContentScripts()).filter((r) => r.id.startsWith('dxbt-'));
     const wanted = Object.entries(TWEAK_SCRIPTS).filter(([k]) => tw[k]).map(([k, s]) => ({
         id: `dxbt-${k}`, js: [s.file], matches: s.matches || ['<all_urls>'], excludeMatches: disabledSites.flatMap(sitePatterns),
         runAt: 'document_start', allFrames: s.allFrames ?? true, world: s.world, persistAcrossSessions: true
     }));
-    if (wanted.length) await chrome.scripting.registerContentScripts(wanted).catch((e) => logError('tweak scripts', e));
+    // Re-registering rewrites the whole script registry (slow), so only do it on a real change
+    const key = (r) => JSON.stringify([r.id, r.js, r.matches, r.excludeMatches || [], r.allFrames, r.world]);
+    const same = registered.length === wanted.length && registered.every((r) => wanted.some((w) => key(w) === key(r)));
+    if (!same) {
+        if (registered.length) await chrome.scripting.unregisterContentScripts({ ids: registered.map((r) => r.id) }).catch(() => {});
+        if (wanted.length) await chrome.scripting.registerContentScripts(wanted).catch((e) => logError('tweak scripts', e));
+    }
 
     await applyProxy(tw.proxy);
 }
