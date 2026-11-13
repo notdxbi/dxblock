@@ -9,7 +9,8 @@ const [tab] = forced ? [{ id: forced }] : await chrome.tabs.query({ active: true
 
 const KIND = {
     ad: 'AD', stealth: 'AD', tracker: 'TRK', threat: 'RISK', popup: 'POP', param: 'URL',
-    fp: 'FP', phishing: 'WARN', unwrapped: 'LINK', amp: 'AMP', sponsor: 'SKIP', cleaned: 'WIPE'
+    fp: 'FP', phishing: 'WARN', unwrapped: 'LINK', amp: 'AMP', sponsor: 'SKIP', cleaned: 'WIPE',
+    replay: 'REC', dark: 'TRICK', consent: 'NOPE', clipboard: 'CLIP'
 };
 const fmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}k` : (n || 0).toLocaleString());
 
@@ -61,7 +62,7 @@ function feedItem(ev, animateIn = true) {
     const tag = li.querySelector('.tag');
     tag.textContent = KIND[ev.kind] || 'AD';
     tag.classList.add(ev.kind);
-    li.querySelector('.fhost').textContent = ev.kind === 'fp' ? `${ev.host} fingerprinting` : ev.host;
+    li.querySelector('.fhost').textContent = ev.kind === 'fp' ? `${ev.host} fingerprinting` : ev.kind === 'replay' ? `${ev.host} tried to record you` : ev.kind === 'consent' ? `cookies rejected on ${ev.host}` : ev.host;
     li.querySelector('.fco').textContent = ev.company || '';
     const time = li.querySelector('.ftime');
     time.textContent = ago(ev.t);
@@ -115,6 +116,35 @@ function renderStats(s, opts = {}) {
     animate($('s-fp'), s.fp);
     renderGrade(s);
     renderCompanies(s);
+    renderAlerts(s);
+}
+
+// Alerts in the "This site" tab: screen recording, data breaches, dark patterns, cookie banners, clipboard
+let alertKey = '';
+function renderAlerts(s) {
+    if (!state) return;
+    const items = [];
+    if (s.replayBy?.length) items.push(['rec', 'Screen recording blocked', `${s.replayBy.join(', ')} tried to record your mouse, clicks and typing on this site.`]);
+    for (const b of state.breaches || []) {
+        items.push(['breach', `${b.title} data breach (${b.date.slice(0, 4)})`, `${fmt(b.count)} accounts leaked: ${b.classes.slice(0, 5).join(', ').toLowerCase()}. If you have an account, change its password.`]);
+    }
+    if (s.darkKinds?.length) items.push(['dark', `${s.darkKinds.length} manipulation trick${s.darkKinds.length === 1 ? '' : 's'} spotted`, `${s.darkKinds.join(' · ')}. They're outlined in orange on the page.`]);
+    if (s.consent) items.push(['ok', 'Cookie banner answered "Reject all"', 'dx.block said no to tracking cookies for you.']);
+    if (s.clipboard) items.push(['ok', 'Clipboard protected', 'This site tried to change what you copied, or copying was unlocked.']);
+    const key = JSON.stringify(items);
+    $('alert-dot').hidden = !items.some(([k]) => k === 'rec' || k === 'breach' || k === 'dark');
+    if (key === alertKey) return;
+    alertKey = key;
+    const box = $('alerts');
+    box.innerHTML = '';
+    for (const [kind, title, text] of items) {
+        const d = document.createElement('div');
+        d.className = `alert ${kind}`;
+        d.innerHTML = '<b></b><span></span>';
+        d.querySelector('b').textContent = title;
+        d.querySelector('span').textContent = text;
+        box.append(d);
+    }
 }
 
 function renderAllowed() {
@@ -156,6 +186,9 @@ function renderSite() {
     $('access').hidden = state.hasAccess !== false;
     $('update').hidden = !state.update;
     if (state.update) { $('update').href = state.update.url; $('update-v').textContent = `v${state.update.version}`; }
+    $('lock').classList.toggle('on', !!state.locked);
+    $('lock-t').textContent = state.locked ? 'Locked down' : 'Lockdown';
+    for (const id of ['lock', 'unlock', 'clean']) $(id).disabled = !onWeb;
     const proxy = state.tweaks?.proxy?.mode !== 'off' ? ' · IP hidden' : '';
     $('footer').textContent = `${fmt(state.totals.blocked)} blocked all-time · ${state.lists} lists · ${fmt(state.rules)} filters${proxy}`;
 }
@@ -277,6 +310,22 @@ $('power').addEventListener('change', async (e) => {
     await send({ type: 'site:toggle', host: state.host, disabled: state.disabled });
     chrome.tabs.reload(tab.id);
     setTimeout(() => window.close(), 350);
+});
+$('lock').addEventListener('click', async () => {
+    state.locked = !state.locked;
+    renderSite();
+    await send({ type: 'site:lock', host: state.host, on: state.locked });
+    chrome.tabs.reload(tab.id);
+});
+$('unlock').addEventListener('click', async () => {
+    await send({ type: 'site:unlock', tabId: tab.id });
+    $('unlock').lastChild.textContent = 'Unlocked';
+});
+$('clean').addEventListener('click', async () => {
+    const url = await send({ type: 'link:clean', url: state.url });
+    if (typeof url !== 'string') return;
+    try { await navigator.clipboard.writeText(url); $('clean-t').textContent = url === state.url ? 'Copied' : 'Copied clean'; } catch { $('clean-t').textContent = 'Failed'; }
+    setTimeout(() => { $('clean-t').textContent = 'Clean link'; }, 1800);
 });
 $('pick').addEventListener('click', async () => { await send({ type: 'picker:start', tabId: tab.id }); window.close(); });
 $('dashboard').addEventListener('click', () => {

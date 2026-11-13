@@ -1,13 +1,15 @@
 // Per-tab blocking statistics: the toolbar badge, the popup's counters and its live feed.
 // Fed by webRequest observers in background.js (they only watch; blocking itself is done by DNR).
 import { companyOf } from './lib/companies.js';
+import { replayOf } from './lib/replay.js';
+import { grade } from './ui/graph.js';
 
 const tabs = new Map();          // tabId -> stats for the page currently shown in the tab
 const ports = new Map();         // tabId -> Set of popup ports listening live
 const badgeTimers = new Map();
 let saveTimer = 0;
 let totalsTimer = 0;
-const ZERO = () => ({ blocked: 0, trackers: 0, popups: 0, fp: 0, unwrapped: 0, amp: 0, sponsor: 0, cleaned: 0, phishing: 0, cookies: 0, companies: {} });
+const ZERO = () => ({ blocked: 0, trackers: 0, popups: 0, fp: 0, unwrapped: 0, amp: 0, sponsor: 0, cleaned: 0, phishing: 0, cookies: 0, replay: 0, dark: 0, consent: 0, clipboard: 0, companies: {} });
 let pendingTotals = ZERO();
 
 const TRACKER_RE = /analytic|track|pixel|telemetry|metric|stats?[./-]|collect|beacon|insight|tagmanager|gtag|segment|mixpanel|hotjar|clarity|fbevents|matomo|piwik|amplitude|heap(?:analytics)?|fullstory|newrelic|nr-data|sentry|quantserve|scorecardresearch|chartbeat|optimizely|bat\.bing|connect\.facebook|ads-twitter|snap\.licdn|bounceexchange|crazyegg|mouseflow|smartlook|yandex\.ru\/(?:metrika|watch)|mc\.yandex|ophan\.|\blogs?[.-]|[./-]events?[./]|\brum[.-]|measure|monitor|sessioncam|permutive|bluekai|demdex|omtrdc|2o7\.net|everesttech|adobedtm|tealium|parsely|cxense|piano\.io|tinypass|branch\.io|appsflyer|adjust\.com|kochava|onesignal|pushwoosh|doubleverify|moatads|iasds|adsafeprotected/i;
@@ -20,7 +22,7 @@ export function kindOf(url) {
 }
 
 const hostOf = (url) => { try { return new URL(url).hostname; } catch { return ''; } };
-const fresh = (url) => ({ host: hostOf(url), blocked: 0, ads: 0, trackers: 0, threats: 0, stealth: 0, params: 0, popups: 0, fp: 0, fpApis: [], unwrapped: 0, amp: 0, sponsor: 0, recent: [], hosts: {}, companies: {}, since: Date.now() });
+const fresh = (url) => ({ host: hostOf(url), blocked: 0, ads: 0, trackers: 0, threats: 0, stealth: 0, params: 0, popups: 0, fp: 0, fpApis: [], unwrapped: 0, amp: 0, sponsor: 0, replay: 0, replayBy: [], dark: 0, darkKinds: [], consent: 0, clipboard: 0, recent: [], hosts: {}, companies: {}, since: Date.now() });
 
 export function getTab(tabId) {
     let s = tabs.get(tabId);
@@ -29,6 +31,7 @@ export function getTab(tabId) {
 }
 
 export function resetTab(tabId, url) {
+    saveGrade(tabs.get(tabId));
     tabs.set(tabId, fresh(url));
     updateBadge(tabId);
     broadcast(tabId, { type: 'reset', stats: summary(tabId) });
@@ -36,6 +39,7 @@ export function resetTab(tabId, url) {
 }
 
 export function removeTab(tabId) {
+    saveGrade(tabs.get(tabId));
     tabs.delete(tabId);
     scheduleSave();
 }
@@ -66,6 +70,8 @@ export function record(tabId, kind, url) {
         }
     }
     const ev = { kind, host, t: Date.now(), company: companyOf(host) };
+    const vendor = kind !== 'param' && replayOf(host, url);
+    if (vendor && !(s.replayBy ||= []).includes(vendor)) { s.replayBy.push(vendor); s.replay = (s.replay || 0) + 1; pendingTotals.replay++; queueMicrotask(() => event(tabId, 'replay-alert', vendor)); }
     s.recent.unshift(ev);
     if (s.recent.length > 60) s.recent.length = 60;
     updateBadge(tabId);
@@ -77,9 +83,15 @@ export function record(tabId, kind, url) {
 // Non-blocking events: fingerprinting attempts, unwrapped links, AMP skips, sponsor skips, phishing warnings, ...
 export function event(tabId, kind, detail = '') {
     const s = tabId >= 0 ? getTab(tabId) : null;
-    if (kind === 'fp') {
+    if (kind === 'replay-alert') {
+        kind = 'replay';            // already counted in record()
+    } else if (kind === 'fp') {
         pendingTotals.fp++;
         if (s && !s.fpApis.includes(detail)) { s.fpApis.push(detail); s.fp++; }
+    } else if (kind === 'dark') {
+        if (s && (s.darkKinds ||= []).includes(detail)) return;
+        pendingTotals.dark++;
+        if (s) { s.darkKinds.push(detail); s.dark = (s.darkKinds.length); }
     } else if (kind in pendingTotals) {
         pendingTotals[kind]++;
         if (s && kind in s) s[kind]++;
@@ -120,6 +132,7 @@ function updateBadge(tabId) {
 }
 
 export function setBadgeOff(tabId) {
+    markPaused(tabId);
     chrome.action.setBadgeText({ tabId, text: 'off' }).catch(() => {});
     chrome.action.setBadgeBackgroundColor({ tabId, color: '#5b5b66' }).catch(() => {});
 }
@@ -198,6 +211,42 @@ export async function history() {
     addInto(out[day()], pendingTotals);
     return out;
 }
+
+// ---------------------------------------------------------------------------
+// Site grades remembered for the search-result badges (local only)
+// ---------------------------------------------------------------------------
+let grades = null;
+let gradeTimer = 0;
+const loadGrades = async () => (grades ||= (await chrome.storage.local.get('siteGrades')).siteGrades || {});
+const gradeKey = (host) => String(host || '').replace(/^www\./, '');
+function saveGrade(s) {
+    // Only pages that were really open a while, with protection on (paused pages see nothing and would look clean)
+    if (!s?.host || s.paused || Date.now() - (s.since || 0) < 4000) return;
+    const g = grade(s);
+    const rec = { letter: g.letter, score: g.score, trackers: s.trackers || 0, companies: g.companies, fp: s.fp || 0, replay: s.replayBy || [], t: Date.now() };
+    loadGrades().then((all) => {
+        all[gradeKey(s.host)] = rec;
+        clearTimeout(gradeTimer);
+        gradeTimer = setTimeout(() => {
+            const keys = Object.keys(all);
+            if (keys.length > 3000) keys.sort((a, b) => all[a].t - all[b].t).slice(0, keys.length - 2500).forEach((k) => delete all[k]);
+            chrome.storage.local.set({ siteGrades: all }).catch(() => {});
+        }, 2000);
+    }).catch(() => {});
+}
+export async function gradesFor(hosts) {
+    const all = await loadGrades();
+    const out = {};
+    for (const h of hosts) {
+        const parts = gradeKey(h).split('.');
+        for (let i = 0; i < Math.max(1, parts.length - 1); i++) {
+            const g = all[parts.slice(i).join('.')];
+            if (g) { out[h] = g; break; }
+        }
+    }
+    return out;
+}
+export function markPaused(tabId) { getTab(tabId).paused = true; }
 
 export const restored = chrome.storage.session.get('tabStats').then(({ tabStats }) => {
     for (const [id, s] of Object.entries(tabStats || {})) if (!tabs.has(Number(id))) tabs.set(Number(id), s);

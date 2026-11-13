@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.0
+- **Screen-recording alert.** Session-replay services that record your mouse, scrolling, clicks and typing (Hotjar, FullStory, Microsoft Clarity, LogRocket, Mouseflow, Smartlook and 30 more) are blocked, and the popup's *This site* tab names who tried. It also lowers the site's privacy grade
+- **Cookie banners answered "Reject all".** Instead of only hiding the banner, dx.block presses "Reject all" / "Only necessary" for you, so the site records that you said no
+- **Dark-pattern spotter.** Fake countdown timers, "only 2 left!" and "14 people are looking" pressure, guilt-trip buttons and pre-ticked marketing boxes are outlined in orange with an explanation on hover, and listed in the popup
+- **Data breaches.** The popup warns when the site you're on leaked its users' data (Have I Been Pwned's public list, kept locally). New Settings → *Data breaches* tab: check an email address (XposedOrNot), save addresses to spot new breaches later, check a password safely (only 5 characters of its hash are sent), and look up any site
+- **Privacy grades in search results.** A small A–F badge next to results for sites you've visited, and a red *breach* chip for sites that leaked data (Google, Bing, DuckDuckGo, Brave Search, Startpage, Ecosia). Nothing is sent anywhere
+- **Clipboard protection.** Removes "Read more at…" text sites glue onto what you copy, stops a copied crypto wallet, IBAN or card number from being swapped, and blocks clipboard writes without a click. *Unlock copy* in the popup re-enables copy, paste, selecting and right-click on sites that block them
+- **Copy clean link** in the right-click menu and the popup: tracking parameters removed, tracking redirects skipped, Amazon product links shortened
+- **Lockdown mode** for one site from the popup: blocks every script and all other companies' content (images, styles and fonts still load)
+- **Distraction switches** (off by default, in Settings → Privacy): hide search AI answers and sponsored results (Google AI Overviews, Bing Copilot, DuckDuckGo Search Assist, Brave), YouTube Shorts (Shorts links open as normal videos), YouTube end-screen suggestions, and Amazon sponsored products
+
 ## 1.3.0
 - **Main on/off switch.** A power button in the popup (and a switch at the top of Settings) turns dx.block off everywhere and back on, without uninstalling or losing your settings. While it's off nothing is blocked or hidden, and the toolbar shows it's off
 - **Allowed sites, made easy.** Add a site in the popup's *This site* tab or in Settings → Allowed sites (paste any address, it's cleaned up to the site), and remove one with ×. Pasting a whole list still works

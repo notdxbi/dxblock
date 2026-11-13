@@ -1,13 +1,14 @@
 {
   "name": "dxblock",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "dx.block: a thorough Manifest V3 ad blocker for Brave and Chromium",
   "scripts": {
     "build": "node tools/build.mjs",
     "build:offline": "node tools/build.mjs --offline",
     "test": "node tools/test.mjs",
     "package": "node tools/package.mjs",
-    "release": "node tools/build.mjs && node tools/test.mjs && node tools/package.mjs"
+    "release": "node tools/build.mjs && node tools/test.mjs && node tools/package.mjs",
+    "test:features": "node tools/test-features.mjs"
   },
   "keywords": [],
   "author": "",

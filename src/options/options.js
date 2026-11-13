@@ -244,3 +244,189 @@ $('forget-now').addEventListener('click', async () => {
 send({ type: 'hotfix:info' }).then((h) => {
     if (h?.at) $('hotfix-meta').textContent += ` Last update ${new Date(h.at).toLocaleString()} (${h.rules} fixes).`;
 });
+
+// ---------------------------------------------------------------------------
+// Data breaches
+// ---------------------------------------------------------------------------
+const esc = (x) => String(x ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const big = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} billion` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} million` : (n || 0).toLocaleString());
+let breachList = null;
+const breachesReady = send({ type: 'breach:list' }).then((d) => {
+    breachList = d?.list || [];
+    const latest = d?.t ? new Date(d.t).toLocaleDateString() : 'never';
+    $('bs-meta').textContent = `${breachList.length.toLocaleString()} known breaches (list updated ${latest}). Showing the most recent:`;
+    renderSiteSearch('');
+    return breachList;
+}).catch(() => { breachList = []; $('bs-meta').textContent = 'Couldn’t load the breach list. Check your connection.'; return []; });
+
+function breachCard(b, { isNew = false } = {}) {
+    const d = document.createElement('div');
+    d.className = 'br-card';
+    const classes = (b.classes || []).map((c) => `<i class="${/password|credit|bank|security q|auth|social security|passport/i.test(c) ? 'hot' : ''}">${esc(c)}</i>`).join('');
+    d.innerHTML = `<div class="br-head"><b>${esc(b.title || b.name)}</b>${isNew ? '<em class="new">New</em>' : ''}${b.spam ? '<em>Spam list</em>' : ''}<span>${esc((b.date || '').slice(0, 7))}${b.count ? ` · ${big(b.count)} accounts` : ''}${b.domain ? ` · ${esc(b.domain)}` : ''}</span></div>
+        ${classes ? `<div class="br-classes">${classes}</div>` : ''}${b.desc ? `<p>${esc(b.desc)}</p>` : b.unknown ? '<p>No details published for this breach yet.</p>' : ''}`;
+    d.querySelector('p')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('open'));
+    return d;
+}
+
+async function lookupEmail(email) {
+    const r = await fetch(`https://api.xposedornot.com/v1/check-email/${encodeURIComponent(email)}`, { cache: 'no-store' });
+    if (r.status === 404) return [];
+    if (r.status === 429) throw new Error('Too many checks in a row. Wait a minute and try again.');
+    if (!r.ok) throw new Error(`The breach service didn’t answer (HTTP ${r.status}). Try again later.`);
+    const j = await r.json();
+    if (j?.Error) return [];
+    return [...new Set((j?.breaches || []).flat().map(String))];
+}
+// XposedOrNot's own list fills in breaches Have I Been Pwned doesn't have (downloaded whole, kept a week)
+async function xonList() {
+    const { xonBreaches: c } = await chrome.storage.local.get('xonBreaches');
+    if (c?.list && Date.now() - c.t < 7 * 24 * 3600e3) return c.list;
+    try {
+        const r = await fetch('https://api.xposedornot.com/v1/breaches', { cache: 'no-store' });
+        const list = ((await r.json())?.exposedBreaches || []).map((b) => ({
+            name: String(b.breachID), title: String(b.breachID), domain: String(b.domain || '').toLowerCase(), date: String(b.breachedDate || '').slice(0, 10),
+            count: Number(b.exposedRecords) || 0, classes: b.exposedData || [], verified: !!b.verified, desc: String(b.exposureDescription || '').slice(0, 1500)
+        }));
+        await chrome.storage.local.set({ xonBreaches: { t: Date.now(), list } });
+        return list;
+    } catch { return c?.list || []; }
+}
+const key = (n) => String(n).toLowerCase().replace(/[^a-z0-9]/g, '');
+async function detailsFor(names) {
+    const hibp = new Map((breachList || []).map((b) => [key(b.name), b]));
+    let xon = null;
+    if (names.some((n) => !hibp.has(key(n)))) xon = new Map((await xonList()).map((b) => [key(b.name), b]));
+    return names.map((n) => hibp.get(key(n)) || xon?.get(key(n)) || { name: n, title: n, unknown: true })
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+async function savedEmails() { return (await chrome.storage.local.get('breachWatch')).breachWatch || []; }
+async function saveEmail(email, names) {
+    const list = (await savedEmails()).filter((x) => x.email !== email);
+    list.unshift({ email, names, checked: Date.now() });
+    await chrome.storage.local.set({ breachWatch: list.slice(0, 20) });
+}
+
+async function showEmailResult(email, names, prev) {
+    const box = $('br-results');
+    box.innerHTML = '';
+    const items = await detailsFor(names);
+    const st = $('br-status');
+    if (!items.length) {
+        st.className = 'br-status good';
+        st.innerHTML = `<b>Good news: ${esc(email)} isn’t in any known breach.</b><span>Breaches are found all the time, so check again now and then.</span>`;
+        return;
+    }
+    const pw = items.some((b) => (b.classes || []).some((c) => /password/i.test(c)));
+    const fresh = prev ? items.filter((b) => !prev.includes(b.name)) : [];
+    st.className = 'br-status bad';
+    st.innerHTML = `<b>${esc(email)} was in ${items.length} data breach${items.length === 1 ? '' : 'es'}${fresh.length ? ` (${fresh.length} new since your last check)` : ''}.</b>
+        <span>${pw ? 'Passwords were leaked in some of these. Change the password on those sites <u>and anywhere you used the same one</u>, and turn on two-factor login where you can.' : 'No passwords in these leaks, but expect more spam and phishing emails to this address.'}
+        Second opinion: <a href="https://haveibeenpwned.com/account/${encodeURIComponent(email)}" target="_blank" rel="noopener">Have I Been Pwned</a>.</span>`;
+    const show = (list) => list.forEach((b) => box.append(breachCard(b, { isNew: fresh.includes(b) })));
+    // New ones first, then the rest by date; long lists are cut to 12 with a "show all"
+    const ordered = [...fresh, ...items.filter((b) => !fresh.includes(b))];
+    show(ordered.slice(0, 12));
+    if (ordered.length > 12) {
+        const more = Object.assign(document.createElement('button'), { textContent: `Show all ${ordered.length} breaches`, className: 'br-more' });
+        more.addEventListener('click', () => { more.remove(); show(ordered.slice(12)); });
+        box.append(more);
+    }
+}
+
+async function checkEmail(email, { remember }) {
+    const st = $('br-status');
+    st.className = 'br-status'; st.textContent = 'Checking…';
+    $('br-results').innerHTML = '';
+    try {
+        await breachesReady;
+        const prev = (await savedEmails()).find((x) => x.email === email)?.names;
+        const names = await lookupEmail(email);
+        await showEmailResult(email, names, prev);
+        if (remember) { await saveEmail(email, names); renderSaved(); }
+        return names;
+    } catch (e) {
+        st.className = 'br-status bad'; st.innerHTML = `<b>Couldn’t check right now.</b><span>${esc(e.message)}</span>`;
+        return null;
+    }
+}
+$('br-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = $('br-email').value.trim().toLowerCase();
+    if (email) checkEmail(email, { remember: $('br-remember').checked });
+});
+
+async function renderSaved() {
+    const list = await savedEmails();
+    $('br-saved-wrap').hidden = !list.length;
+    const ul = $('br-saved');
+    ul.innerHTML = '';
+    for (const x of list) {
+        const li = document.createElement('li');
+        li.innerHTML = `<button class="link" title="Show results"></button><span class="${x.names.length ? 'bad' : 'ok'}"></span><small class="muted"></small><button class="x" title="Forget this address" aria-label="Forget this address">×</button>`;
+        li.querySelector('.link').textContent = x.email;
+        li.querySelector('span').textContent = x.names.length ? `${x.names.length} breach${x.names.length === 1 ? '' : 'es'}` : 'not found';
+        li.querySelector('small').textContent = `checked ${new Date(x.checked).toLocaleDateString()}`;
+        li.querySelector('.link').addEventListener('click', async () => { await breachesReady; $('br-email').value = x.email; showEmailResult(x.email, x.names, null); });
+        li.querySelector('.x').addEventListener('click', async () => {
+            await chrome.storage.local.set({ breachWatch: (await savedEmails()).filter((y) => y.email !== x.email) });
+            renderSaved();
+        });
+        ul.append(li);
+    }
+}
+renderSaved();
+$('br-all').addEventListener('click', async () => {
+    const list = await savedEmails();
+    let newOnes = 0;
+    for (const [i, x] of list.entries()) {
+        $('br-all-status').textContent = `Checking ${i + 1} of ${list.length}…`;
+        const names = await checkEmail(x.email, { remember: true });
+        if (names) newOnes += names.filter((n) => !x.names.includes(n)).length;
+        if (i < list.length - 1) await new Promise((r) => setTimeout(r, 1500));   // the service allows about one check a second
+    }
+    $('br-all-status').textContent = newOnes ? `${newOnes} new breach${newOnes === 1 ? '' : 'es'} found` : 'No new breaches';
+});
+
+// Password check (k-anonymity: only the first 5 hex characters of the SHA-1 hash are sent)
+$('pw-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pw = $('pw').value;
+    const st = $('pw-status');
+    if (!pw) return;
+    st.className = 'br-status'; st.textContent = 'Checking…';
+    try {
+        const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(pw)))].map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+        const r = await fetch(`https://api.pwnedpasswords.com/range/${hash.slice(0, 5)}`, { headers: { 'Add-Padding': 'true' }, cache: 'no-store' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const line = (await r.text()).split('\n').find((l) => l.startsWith(hash.slice(5)));
+        const n = line ? Number(line.split(':')[1]) : 0;
+        $('pw').value = '';
+        if (n > 0) {
+            st.className = 'br-status bad';
+            st.innerHTML = `<b>This password has leaked ${n.toLocaleString()} time${n === 1 ? '' : 's'}.</b><span>Attackers try leaked passwords first. Stop using it everywhere, and use a password manager to make unique ones.</span>`;
+        } else {
+            st.className = 'br-status good';
+            st.innerHTML = '<b>Not found in any known leak.</b><span>That’s good, but only use it on one site, and make sure it’s long.</span>';
+        }
+    } catch (err) {
+        st.className = 'br-status bad'; st.innerHTML = `<b>Couldn’t check right now.</b><span>${esc(err.message)}</span>`;
+    }
+});
+
+// Website lookup in the local list
+function renderSiteSearch(q) {
+    const box = $('bs-results');
+    box.innerHTML = '';
+    if (!breachList) return;
+    q = q.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+    const hits = q
+        ? breachList.filter((b) => b.domain.includes(q) || b.name.toLowerCase().includes(q) || b.title.toLowerCase().includes(q))
+        : [...breachList];
+    hits.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    if (q) $('bs-meta').textContent = hits.length ? `${hits.length} breach${hits.length === 1 ? '' : 'es'} match “${q}”` : `No known breaches match “${q}”.`;
+    for (const b of hits.slice(0, q ? 15 : 6)) box.append(breachCard(b));
+}
+let bsTimer = 0;
+$('bs').addEventListener('input', () => { clearTimeout(bsTimer); bsTimer = setTimeout(() => renderSiteSearch($('bs').value), 150); });
+$('bs-form').addEventListener('submit', (e) => { e.preventDefault(); renderSiteSearch($('bs').value); });

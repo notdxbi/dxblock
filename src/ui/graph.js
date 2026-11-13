@@ -2,9 +2,11 @@
 // flying in from the edge until a tendril shoots out, grabs it and pins it to its company's web.
 const COLORS = {
     ad: '#ff3b45', stealth: '#ff3b45', tracker: '#a970ff', threat: '#ffb020', popup: '#2fb7ff',
-    fp: '#ff6b9a', phishing: '#ffb020', unwrapped: '#22d38a', amp: '#22d38a', sponsor: '#22d38a', cleaned: '#22d38a', param: '#8d8d99'
+    fp: '#ff6b9a', phishing: '#ffb020', unwrapped: '#22d38a', amp: '#22d38a', sponsor: '#22d38a', cleaned: '#22d38a', param: '#8d8d99',
+    replay: '#ff3b45', dark: '#ffb020', consent: '#22d38a', clipboard: '#2fb7ff'
 };
-const LABELS = { fp: 'Fingerprinting blocked', phishing: 'Fake site warning', unwrapped: 'Tracking link skipped', amp: 'AMP skipped', sponsor: 'Sponsor skipped', cleaned: 'Site data deleted', param: 'Link tracker removed' };
+const LABELS = { fp: 'Fingerprinting blocked', phishing: 'Fake site warning', unwrapped: 'Tracking link skipped', amp: 'AMP skipped', sponsor: 'Sponsor skipped', cleaned: 'Site data deleted', param: 'Link tracker removed',
+    replay: 'Screen recording blocked', dark: 'Dark pattern spotted', consent: 'Cookies rejected', clipboard: 'Clipboard protected' };
 
 export class TrackerWeb {
     constructor(canvas, { labels = false, maxNodes = 36, reduced = false } = {}) {
@@ -354,6 +356,8 @@ export function grade(s, https = true) {
     score -= Math.min(36, (s?.fp || 0) * 12);
     score -= Math.min(15, (s?.popups || 0) * 5);
     score -= Math.min(10, Math.max(0, (s?.ads || 0) - 5) * 0.5);
+    score -= Math.min(20, (s?.replayBy?.length || 0) * 10);   // tried to record your visit
+    score -= Math.min(15, (s?.dark || 0) * 5);                 // manipulation tricks
     if (!https) score -= 15;
     const letter = score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F';
     return { letter, score: Math.max(0, Math.round(score)), companies };

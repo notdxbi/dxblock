@@ -54,7 +54,7 @@ into the browser's native blocking engine. It also closes the gaps Manifest V3 l
 **Blocking**
 - Ads, trackers, analytics, social pixels, telemetry, malware and scam domains, about **385,000 filters** active by default
 - **Pop-ups and pop-unders**: closed using EasyList's pop-up filters, 60,000 known ad/scam domains, and pop-ups opened by ad frames
-- **Cookie banners and nag pop-ups** gone (uBlock and AdGuard annoyance lists)
+- **Cookie banners answered "Reject all"** for you (OneTrust, Cookiebot, Quantcast, Didomi, Google, Usercentrics and more), not just hidden, so the site records that you said no. Nag pop-ups gone (uBlock and AdGuard annoyance lists)
 - **YouTube and anti-adblock walls**: defused with the same scriptlets uBlock Origin and AdGuard use
 - **Dangerous pages** are replaced by a warning screen with *Go back* and *Proceed anyway*
 - **Link tracking** (`fbclid`, `gclid` and 300+ others) stripped from URLs
@@ -65,6 +65,8 @@ into the browser's native blocking engine. It also closes the gaps Manifest V3 l
 - **Third-party cookies and tracking beacons blocked**, so ad companies can't follow you between sites
 - **Tracking links skipped**: `google.com/url`, `l.facebook.com`, `out.reddit.com`, LinkedIn, VK, DuckDuckGo and more go straight to the real page; AMP pages open as the original
 - **Global Privacy Control / Do Not Track** opt-out signal
+- **Screen-recording alert**: session-replay services (Hotjar, FullStory, Microsoft Clarity, LogRocket, Mouseflow and 30 more) that record your mouse, clicks and typing are blocked, and the popup names who tried
+- **Copy clean link**: right-click a link or page, or use the popup, to copy it without tracking parameters (Google redirects skipped, Amazon links cut to `/dp/<id>`)
 - Optional: **Blend in** (sites see UTC and US English), strip third-party referrers, **forget sites when you leave** (cookies and storage deleted when the last tab closes, with a keep list)
 
 **Safety**
@@ -72,6 +74,14 @@ into the browser's native blocking engine. It also closes the gaps Manifest V3 l
 - **Phishing blocklist** (30,000 active phishing sites) and a malware URL list, with a warning screen
 - Warning before you type a password on an unencrypted page; optional **HTTPS-only** with automatic fallback
 - **Hide your IP** through Tor or your own SOCKS5/HTTP proxy or VPN (with *Check my IP*), and **WebRTC leak protection**
+- **Data breaches**: the popup warns when the site you're on has leaked user data, and Settings → *Data breaches* checks your email address (XposedOrNot + Have I Been Pwned details) and passwords (k-anonymity: only 5 characters of a hash are sent), with saved addresses that highlight new breaches
+- **Clipboard protection**: "Read more at…" tails glued onto copied text are removed, copied crypto wallets, IBANs and card numbers can't be swapped, and sites can't write to your clipboard without a click. *Unlock copy* re-enables copy, paste and right-click on sites that block them
+- **Lockdown mode** for a single site: one click blocks every script and all other companies' content, for sketchy download or streaming sites
+
+**Fewer tricks and distractions**
+- **Dark-pattern spotter**: fake countdown timers, "only 2 left!" and "14 people are looking" pressure, guilt-trip "No thanks, I hate saving money" buttons and pre-ticked marketing boxes are outlined and explained
+- **Privacy grades in search results**: an A–F badge for sites you've visited and a red *breach* chip for sites that leaked data, on Google, Bing, DuckDuckGo, Brave Search, Startpage and Ecosia (worked out locally)
+- Optional switches: hide **Google AI Overviews** and other search AI answers and sponsored results, **YouTube Shorts**, **YouTube end-screen suggestions**, and **Amazon sponsored products**
 - **Site permissions** at a glance (camera, microphone, location, notifications) with one-click revoke
 
 **See what's happening**

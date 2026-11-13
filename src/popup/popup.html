@@ -48,11 +48,18 @@
     <div class="tabs" role="tablist">
       <button class="ftab on" data-view="live"><i class="live-dot"></i>Live</button>
       <button class="ftab" data-view="companies">Companies</button>
-      <button class="ftab" data-view="site">This site</button>
+      <button class="ftab" data-view="site" id="site-tab">This site<i class="alert-dot" id="alert-dot" hidden></i></button>
     </div>
     <ul id="live" class="view"><li class="empty">Watching this page for ads and trackers…</li></ul>
     <ul id="companies" class="view" hidden></ul>
     <div id="site" class="view" hidden>
+      <div class="alerts" id="alerts"></div>
+      <div class="tools">
+        <button id="lock" title="Block all scripts and other companies' content on this site. For sketchy download or streaming sites. Reloads the page.">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3"/><rect x="5" y="11" width="14" height="10" rx="2"/></svg><span id="lock-t">Lockdown</span></button>
+        <button id="unlock" title="Let me copy, paste, select text and right-click on this page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>Unlock copy</button>
+        <button id="clean" title="Copy this page's link without tracking parameters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span id="clean-t">Clean link</span></button>
+      </div>
       <p id="site-summary" class="muted"></p>
       <div id="perms" class="perms"></div>
       <div class="allowed">
