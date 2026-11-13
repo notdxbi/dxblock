@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+- **Main on/off switch.** A power button in the popup (and a switch at the top of Settings) turns dx.block off everywhere and back on, without uninstalling or losing your settings. While it's off nothing is blocked or hidden, and the toolbar shows it's off
+- **Allowed sites, made easy.** Add a site in the popup's *This site* tab or in Settings → Allowed sites (paste any address, it's cleaned up to the site), and remove one with ×. Pasting a whole list still works
+- Fixed: Chrome showed warnings on the extensions page ("regexFilter value exceeded the 2KB memory limit") for about 100 filter rules it couldn't compile. dx.block now asks Chrome itself which rules it can compile while building and leaves the others out, so no warnings, and nothing that was working stops working
+- The popup fits Chrome's 600 px limit again (it was 6 px over)
+- Filter lists updated
+
 ## 1.2.1
 - Fixed: the browser could freeze or stutter for up to ~20 seconds right after opening. dx.block rewrote its page-script registry on every startup; it now only does so when something changed, and registers half as many site patterns
 - Filter lists updated

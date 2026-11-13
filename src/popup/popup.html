@@ -13,6 +13,9 @@
       <span class="logo">dx<b>.</b>block</span>
     </div>
     <div class="status" id="status"><i></i><span id="status-text">Live</span></div>
+    <button class="icon power" id="global" title="Turn dx.block off everywhere" aria-label="dx.block on or off" aria-pressed="true">
+      <svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>
+    </button>
     <button class="icon" id="settings" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
     </button>
@@ -52,6 +55,11 @@
     <div id="site" class="view" hidden>
       <p id="site-summary" class="muted"></p>
       <div id="perms" class="perms"></div>
+      <div class="allowed">
+        <div class="allowed-head"><b>Allowed sites</b><span class="muted small" id="allowed-count"></span></div>
+        <form class="allowed-add" id="allowed-add"><input id="allowed-input" placeholder="add a site, e.g. example.com" autocomplete="off" spellcheck="false" aria-label="Site to allow"><button>Allow</button></form>
+        <ul class="allowed-list" id="allowed-list"></ul>
+      </div>
     </div>
   </section>
 

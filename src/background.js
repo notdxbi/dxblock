@@ -42,6 +42,7 @@ const UNWRAP = [
     { dnr: '^https?://(?:www\\.)?pinterest\\.[a-z.]+/offsite/\\?', re: '^https?://(?:www\\.)?pinterest\\.[a-z.]+/offsite/\\?', params: ['url'] }
 ];
 const SITE_RULE_BASE = 1;
+const GLOBAL_OFF_RULE = 8_999;   // the main switch: one allow-everything rule while dx.block is off
 
 // ---------------------------------------------------------------------------
 // Data (loaded lazily, kept while the worker lives)
@@ -108,7 +109,7 @@ const TWEAK_DEFAULTS = {
     hotfix: true,            // daily fast fixes from the dx.block repo
     proxy: { mode: 'off', scheme: 'socks5', host: '127.0.0.1', port: 9050, user: '', pass: '' }
 };
-const DEFAULTS = { lists: {}, disabledSites: [], userFilters: '', tweaks: TWEAK_DEFAULTS };
+const DEFAULTS = { enabled: true, lists: {}, disabledSites: [], userFilters: '', tweaks: TWEAK_DEFAULTS };
 async function settings() {
     const s = await chrome.storage.local.get(DEFAULTS);
     return { ...DEFAULTS, ...s, tweaks: { ...TWEAK_DEFAULTS, ...s.tweaks, proxy: { ...TWEAK_DEFAULTS.proxy, ...(s.tweaks?.proxy || {}) } } };
@@ -150,8 +151,9 @@ const baseOf = (h) => h.split('.').slice(-2).join('.');
 const sitePatterns = (h) => (/^[\d.]+$|:/.test(h) ? [`*://${h}/*`] : [`*://*.${h}/*`]);   // *.h also matches h
 
 async function isDisabled(host) {
+    const { disabledSites, enabled } = await settings();
+    if (enabled === false) return true;   // main switch off: everything is allowed everywhere
     if (!host) return false;
-    const { disabledSites } = await settings();
     const chain = hostChain(host);
     return disabledSites.some((s) => chain.includes(s));
 }
@@ -255,6 +257,12 @@ async function syncDynamicRules() {
         action: { type: 'allowAllRequests' },
         condition: { requestDomains: [host], resourceTypes: ['main_frame', 'sub_frame'] }
     }));
+    if (s.enabled === false) add.push({
+        id: GLOBAL_OFF_RULE,
+        priority: PRIORITY.siteDisabled,
+        action: { type: 'allowAllRequests' },
+        condition: { resourceTypes: ['main_frame', 'sub_frame'] }
+    });
     const tw = s.tweaks;
     const ALL_TYPES = ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'media', 'websocket', 'other'];
     if (tw.gpc) add.push({
@@ -328,6 +336,12 @@ async function syncContentScripts({ force = false } = {}) {
     const excludeMatches = s.disabledSites.flatMap(sitePatterns);
     const existing = await chrome.scripting.getRegisteredContentScripts();
     const ours = existing.filter((r) => r.id.startsWith(OUR_PREFIX));
+    if (s.enabled === false) {
+        // main switch off: no page cleanup anywhere (registered again when it's switched back on)
+        if (ours.length) await chrome.scripting.unregisterContentScripts({ ids: ours.map((r) => r.id) });
+        await chrome.storage.local.remove('scriptStamp');
+        return;
+    }
     // The pattern count catches a rebuilt registry under an unchanged version (unpacked installs)
     const stamp = `${chrome.runtime.getManifest().version}|${[...groups].sort().join(',')}|${wanted.reduce((n, r) => n + r.matches.length, 0)}`;
     const { scriptStamp } = await chrome.storage.local.get('scriptStamp');
@@ -404,7 +418,7 @@ let proxyListener = null;
 let proxyAuth = null;
 
 async function applyTweaks() {
-    const { tweaks: tw, disabledSites } = await settings();
+    const { tweaks: tw, disabledSites, enabled } = await settings();
     // WebRTC IP leak protection
     try {
         await chrome.privacy?.network?.webRTCIPHandlingPolicy?.set({ value: tw.webrtc ? 'disable_non_proxied_udp' : 'default' });
@@ -412,7 +426,7 @@ async function applyTweaks() {
 
     // Page-side scripts (GPC flag, notification blocker)
     const registered = (await chrome.scripting.getRegisteredContentScripts()).filter((r) => r.id.startsWith('dxbt-'));
-    const wanted = Object.entries(TWEAK_SCRIPTS).filter(([k]) => tw[k]).map(([k, s]) => ({
+    const wanted = Object.entries(TWEAK_SCRIPTS).filter(([k]) => tw[k] && enabled !== false).map(([k, s]) => ({
         id: `dxbt-${k}`, js: [s.file], matches: s.matches || ['<all_urls>'], excludeMatches: disabledSites.flatMap(sitePatterns),
         runAt: 'document_start', allFrames: s.allFrames ?? true, world: s.world, persistAcrossSessions: true
     }));
@@ -902,6 +916,8 @@ const handlers = {
             web: /^https?:/.test(url),
             hasAccess,
             disabled: s.disabledSites.some((x) => hostChain(host).includes(x)),
+            enabled: s.enabled !== false,
+            allowedSites: s.disabledSites,
             stats: stats.summary(tabId),
             recent: stats.recent(tabId),
             top: stats.topHosts(tabId, 4),
@@ -1020,7 +1036,7 @@ const handlers = {
         const [all, s, on] = await Promise.all([lists(), settings(), enabledLists()]);
         const available = await DNR.getAvailableStaticRuleCount().catch(() => null);
         return {
-            lists: all, enabled: on.map((l) => l.id), disabledSites: s.disabledSites, userFilters: s.userFilters,
+            lists: all, enabled: on.map((l) => l.id), on: s.enabled !== false, disabledSites: s.disabledSites, userFilters: s.userFilters,
             available, version: chrome.runtime.getManifest().version, totals: await stats.totals(), tweaks: s.tweaks
         };
     },
@@ -1066,6 +1082,24 @@ const handlers = {
             errors, requestErrors: seenErrors,
             limits: Object.fromEntries(Object.entries(DNR).filter(([k, v]) => /^[A-Z_]+$/.test(k) && typeof v === 'number'))
         };
+    },
+    'global:toggle': async ({ enabled }) => {
+        await chrome.storage.local.set({ enabled: !!enabled });
+        await syncDynamicRules();
+        await syncContentScripts({ force: true });
+        await applyTweaks();
+        for (const t of await chrome.tabs.query({})) {
+            if (!enabled || await isDisabled(hostOf(t.url || ''))) stats.setBadgeOff(t.id); else stats.setBadgeOn(t.id);
+        }
+        return true;
+    },
+    'sites:add': async ({ host }) => {
+        const s = await settings();
+        return handlers['options:set-sites']({ sites: [...s.disabledSites, host] });
+    },
+    'sites:remove': async ({ host }) => {
+        const s = await settings();
+        return handlers['options:set-sites']({ sites: s.disabledSites.filter((x) => x !== host) });
     },
     'options:set-sites': async ({ sites }) => {
         const clean = [...new Set(sites.map((x) => x.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')).filter(Boolean))];
