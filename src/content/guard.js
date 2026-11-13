@@ -14,6 +14,21 @@
         send({ type: 'guard:fp', api });
     });
 
+    // Clipboard tampering stopped by content/clipboard.js (page world)
+    const clipSeen = new Set();
+    const CLIP = {
+        append: ['Copied text cleaned', 'This site tried to add its own text to what you copied. Your clipboard has only what you selected.'],
+        swap: ['Copy hijack stopped', 'This site tried to replace the address or number you copied with a different one. Your clipboard has what you selected. Be careful on this site.'],
+        silent: ['Clipboard write blocked', 'This site tried to change your clipboard without you clicking anything.']
+    };
+    document.addEventListener('dxb-clip', (e) => {
+        const what = String(e.detail || '');
+        if (!CLIP[what] || clipSeen.has(what)) return;
+        clipSeen.add(what);
+        toast(CLIP[what][0], CLIP[what][1], what === 'swap' ? 'warn' : '');
+        send({ type: 'guard:event', kind: 'clipboard', detail: CLIP[what][0] });
+    });
+
     send({ type: 'guard:init' }).then((cfg) => {
         if (!cfg || cfg.off) return;
         if (cfg.httpWarn && location.protocol === 'http:' && !/^(localhost|127\.|10\.|192\.168\.|\[::1\])/.test(location.hostname)) watchPasswords();

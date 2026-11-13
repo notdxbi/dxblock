@@ -5,6 +5,7 @@ import {
 import { S as SCRIPTLETS, ALIASES, VERSION as SCRIPTLETS_VERSION } from './lib/scriptlet-lib.js';
 import * as stats from './stats.js';
 import { lookalike, toUnicode } from './lib/lookalike.js';
+import { REPLAY_DOMAINS } from './lib/replay.js';
 
 const DNR = chrome.declarativeNetRequest;
 const IS_FIREFOX = typeof browser !== 'undefined' && typeof browser.runtime?.getBrowserInfo === 'function';
@@ -42,6 +43,7 @@ const UNWRAP = [
     { dnr: '^https?://(?:www\\.)?pinterest\\.[a-z.]+/offsite/\\?', re: '^https?://(?:www\\.)?pinterest\\.[a-z.]+/offsite/\\?', params: ['url'] }
 ];
 const SITE_RULE_BASE = 1;
+const LOCK_RULE_BASE = 8_000;    // Lockdown mode: 3 rules per locked site (up to 300 sites)
 const GLOBAL_OFF_RULE = 8_999;   // the main switch: one allow-everything rule while dx.block is off
 
 // ---------------------------------------------------------------------------
@@ -107,9 +109,19 @@ const TWEAK_DEFAULTS = {
     keepSites: [],           // ... except these
     sponsorblock: false,     // skip sponsor segments on YouTube
     hotfix: true,            // daily fast fixes from the dx.block repo
+    replay: true,            // block session-recording scripts (Hotjar, FullStory, Clarity, ...) and say so
+    consent: true,           // press "Reject all" on cookie banners
+    darkPatterns: true,      // outline fake countdowns, "only 2 left", guilt-trip buttons, pre-ticked boxes
+    clipboard: true,         // stop sites changing what you copy
+    searchGrades: true,      // privacy grade + breach chip next to search results
+    siteBreaches: true,      // show a site's known data breaches (Have I Been Pwned list, kept locally)
+    hideAI: false,           // hide AI answers and sponsored results on search engines
+    hideShorts: false,       // hide YouTube Shorts
+    hideEndscreens: false,   // hide YouTube end-screen suggestions
+    hideAmazonAds: false,    // hide Amazon sponsored products
     proxy: { mode: 'off', scheme: 'socks5', host: '127.0.0.1', port: 9050, user: '', pass: '' }
 };
-const DEFAULTS = { enabled: true, lists: {}, disabledSites: [], userFilters: '', tweaks: TWEAK_DEFAULTS };
+const DEFAULTS = { enabled: true, lists: {}, disabledSites: [], lockedSites: [], userFilters: '', tweaks: TWEAK_DEFAULTS };
 async function settings() {
     const s = await chrome.storage.local.get(DEFAULTS);
     return { ...DEFAULTS, ...s, tweaks: { ...TWEAK_DEFAULTS, ...s.tweaks, proxy: { ...TWEAK_DEFAULTS.proxy, ...(s.tweaks?.proxy || {}) } } };
@@ -295,6 +307,26 @@ async function syncDynamicRules() {
         action: { type: 'modifyHeaders', requestHeaders: [{ header: 'Accept-Language', operation: 'set', value: 'en-US,en;q=0.9' }] },
         condition: { resourceTypes: ALL_TYPES }
     });
+    if (tw.replay) add.push({
+        id: TWEAK_RULE_BASE + 6, priority: PRIORITY.block,
+        action: { type: 'block' },
+        condition: { requestDomains: REPLAY_DOMAINS, domainType: 'thirdParty', resourceTypes: NON_FRAME.concat('sub_frame') }
+    });
+    if (tw.hideShorts) add.push({
+        id: TWEAK_RULE_BASE + 7, priority: PRIORITY.redirect,
+        action: { type: 'redirect', redirect: { regexSubstitution: 'https://www.youtube.com/watch?v=\\1' } },
+        condition: { regexFilter: '^https://(?:www\\.|m\\.)?youtube\\.com/shorts/([A-Za-z0-9_-]{6,20})', resourceTypes: ['main_frame'] }
+    });
+    // Lockdown mode: no scripts at all, and nothing active from other companies (images, styles and fonts still load)
+    const LOCK_PRIORITY = PRIORITY.user + 5;   // beats list exceptions, loses to your own @@ filters
+    s.lockedSites.slice(0, 300).forEach((host, i) => {
+        const id = LOCK_RULE_BASE + i * 3;
+        add.push(
+            { id, priority: LOCK_PRIORITY, action: { type: 'block' }, condition: { initiatorDomains: [host], resourceTypes: ['script'] } },
+            { id: id + 1, priority: LOCK_PRIORITY, action: { type: 'block' }, condition: { initiatorDomains: [host], domainType: 'thirdParty', resourceTypes: ['sub_frame', 'xmlhttprequest', 'websocket', 'ping', 'media', 'object', 'other'] } },
+            { id: id + 2, priority: LOCK_PRIORITY, action: { type: 'modifyHeaders', responseHeaders: [{ header: 'content-security-policy', operation: 'append', value: "script-src 'none'; object-src 'none'; worker-src 'none'" }] }, condition: { requestDomains: [host], resourceTypes: ['main_frame', 'sub_frame'] } }
+        );
+    });
     if (tw.unwrap) {
         UNWRAP.forEach((p, i) => add.push({
             id: TWEAK_RULE_BASE + 20 + i, priority: PRIORITY.redirect,
@@ -412,8 +444,26 @@ const TWEAK_SCRIPTS = {
     notifications: { file: 'content/no-notifications.js', world: 'MAIN' },
     fingerprint: { file: 'content/fingerprint.js', world: 'MAIN' },
     blend: { file: 'content/blend.js', world: 'MAIN' },
-    sponsorblock: { file: 'content/sponsorblock.js', world: 'ISOLATED', matches: ['*://*.youtube.com/*'], allFrames: false }
+    sponsorblock: { file: 'content/sponsorblock.js', world: 'ISOLATED', matches: ['*://*.youtube.com/*'], allFrames: false },
+    consent: { file: 'content/consent.js', world: 'ISOLATED' },
+    darkPatterns: { file: 'content/darkpatterns.js', world: 'ISOLATED', allFrames: false },
+    clipboard: { file: 'content/clipboard.js', world: 'MAIN' },
+    searchGrades: { file: 'content/search-grades.js', world: 'ISOLATED', matches: searchMatches(), allFrames: false, runAt: 'document_idle' },
+    hideAI: { file: 'content/hide-ai.js', world: 'ISOLATED', matches: searchMatches(), allFrames: false },
+    hideShorts: { file: 'content/hide-shorts.js', world: 'ISOLATED', matches: ['*://*.youtube.com/*'], allFrames: false },
+    hideEndscreens: { file: 'content/hide-endscreens.js', world: 'ISOLATED', matches: ['*://*.youtube.com/*', '*://*.youtube-nocookie.com/*'] },
+    hideAmazonAds: { file: 'content/hide-amazon.js', world: 'ISOLATED', matches: amazonMatches(), allFrames: false }
 };
+function searchMatches() {
+    const tlds = ['com', 'co.uk', 'de', 'fr', 'es', 'it', 'nl', 'pl', 'ca', 'com.au', 'co.in', 'co.jp', 'com.br', 'com.mx', 'ie', 'se', 'no', 'dk', 'fi',
+        'ch', 'at', 'be', 'pt', 'co.nz', 'com.tr', 'gr', 'cz', 'hu', 'ro', 'co.za', 'com.ar', 'cl', 'co.id', 'com.sg', 'com.hk', 'com.ua', 'ru'];
+    return [...tlds.map((t) => `*://www.google.${t}/search*`), '*://www.bing.com/search*', '*://duckduckgo.com/*', '*://html.duckduckgo.com/*',
+        '*://search.brave.com/search*', '*://www.startpage.com/*', '*://www.ecosia.org/search*'];
+}
+function amazonMatches() {
+    return ['com', 'co.uk', 'de', 'fr', 'it', 'es', 'ca', 'com.au', 'co.jp', 'in', 'com.mx', 'com.br', 'nl', 'se', 'pl', 'com.tr', 'ae', 'sa', 'sg', 'com.be', 'eg', 'ie']
+        .map((t) => `*://*.amazon.${t}/*`);
+}
 let proxyListener = null;
 let proxyAuth = null;
 
@@ -428,10 +478,10 @@ async function applyTweaks() {
     const registered = (await chrome.scripting.getRegisteredContentScripts()).filter((r) => r.id.startsWith('dxbt-'));
     const wanted = Object.entries(TWEAK_SCRIPTS).filter(([k]) => tw[k] && enabled !== false).map(([k, s]) => ({
         id: `dxbt-${k}`, js: [s.file], matches: s.matches || ['<all_urls>'], excludeMatches: disabledSites.flatMap(sitePatterns),
-        runAt: 'document_start', allFrames: s.allFrames ?? true, world: s.world, persistAcrossSessions: true
+        runAt: s.runAt || 'document_start', allFrames: s.allFrames ?? true, world: s.world, persistAcrossSessions: true
     }));
     // Re-registering rewrites the whole script registry (slow), so only do it on a real change
-    const key = (r) => JSON.stringify([r.id, r.js, r.matches, r.excludeMatches || [], r.allFrames, r.world]);
+    const key = (r) => JSON.stringify([r.id, r.js, r.matches, r.excludeMatches || [], r.allFrames, r.world, r.runAt]);
     const same = registered.length === wanted.length && registered.every((r) => wanted.some((w) => key(w) === key(r)));
     if (!same) {
         if (registered.length) await chrome.scripting.unregisterContentScripts({ ids: registered.map((r) => r.id) }).catch(() => {});
@@ -485,6 +535,7 @@ async function syncAll(force = false) {
     await chrome.action.setBadgeTextColor?.({ color: '#ffffff' }).catch?.(() => {});
     await applyTweaks().catch((e) => logError('tweaks', e));
     fetchHotfix();
+    settings().then((s) => s.tweaks.siteBreaches && breachData()).catch(() => {});
     await chrome.storage.session.set({ ready: Date.now() });
 }
 // The proxy listener (Firefox) and auth cache live in memory: restore them whenever the worker starts
@@ -918,6 +969,8 @@ const handlers = {
             disabled: s.disabledSites.some((x) => hostChain(host).includes(x)),
             enabled: s.enabled !== false,
             allowedSites: s.disabledSites,
+            locked: s.lockedSites.some((x) => hostChain(host).includes(x)),
+            breaches: s.tweaks.siteBreaches && host ? breachesFor(host, breachIndexNow()).slice(0, 3) : [],
             stats: stats.summary(tabId),
             recent: stats.recent(tabId),
             top: stats.topHosts(tabId, 4),
@@ -936,11 +989,42 @@ const handlers = {
         return { httpWarn: tweaks.httpWarn, amp: tweaks.amp, unwrap: tweaks.unwrap ? UNWRAP.map(({ re, params }) => ({ re, params })) : [] };
     },
     'guard:fp': ({ api }, sender) => { stats.event(sender.tab?.id ?? -1, 'fp', String(api).slice(0, 20)); return true; },
-    'guard:event': ({ kind }, sender) => {
-        const map = { unwrap: 'unwrapped', amp: 'amp', sponsor: 'sponsor', 'insecure-password': 'phishing' };
-        if (map[kind]) stats.event(sender.tab?.id ?? -1, map[kind], hostOf(sender.tab?.url || ''));
+    'guard:event': ({ kind, detail }, sender) => {
+        const map = { unwrap: 'unwrapped', amp: 'amp', sponsor: 'sponsor', 'insecure-password': 'phishing', consent: 'consent', clipboard: 'clipboard', dark: 'dark' };
+        const withDetail = kind === 'dark' || kind === 'clipboard';
+        if (map[kind]) stats.event(sender.tab?.id ?? -1, map[kind], withDetail ? String(detail || '').slice(0, 90) : hostOf(sender.tab?.url || ''));
         return true;
     },
+    'grades:get': async ({ hosts }) => {
+        const { tweaks } = await settings();
+        if (!tweaks.searchGrades || !Array.isArray(hosts)) return {};
+        hosts = hosts.slice(0, 60).map(String);
+        const grades = await stats.gradesFor(hosts);
+        const idx = tweaks.siteBreaches ? await breachIndex() : null;
+        const out = {};
+        for (const h of hosts) {
+            const b = idx ? breachesFor(h, idx)[0] : null;
+            if (grades[h] || b) out[h] = { grade: grades[h] || null, breach: b ? { title: b.title, date: b.date, count: b.count, classes: b.classes } : null };
+        }
+        return out;
+    },
+    'breach:list': async ({ refresh }) => (await breachData({ refresh: !!refresh })),
+    'site:lock': async ({ host, on }) => {
+        const s = await settings();
+        const site = String(host || '').replace(/^www\./, '');
+        if (!site) return s.lockedSites;
+        let sites = s.lockedSites.filter((x) => !hostChain(host).includes(x));
+        if (on) sites = [...sites, site];
+        await chrome.storage.local.set({ lockedSites: [...new Set(sites)] });
+        await syncDynamicRules();
+        return sites;
+    },
+    'site:unlock': async ({ tabId }) => {
+        await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: unlockPage }).catch(() => null);
+        stats.event(tabId, 'clipboard', 'Copy, paste and right-click unlocked');
+        return true;
+    },
+    'link:clean': async ({ url }) => cleanUrl(url),
     'blocked:trust': ({ url }) => { const h = hostOf(url); if (h) trustedHosts.add(h); return true; },
     'unwrap:bypass': async ({ url }) => {
         const host = hostOf(url);
@@ -1119,15 +1203,136 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 });
 
 // ---------------------------------------------------------------------------
+// Data breaches: Have I Been Pwned's public list of breached sites (no account, no personal data sent),
+// downloaded once a week and kept locally for the popup, the search badges and the Settings page
+// ---------------------------------------------------------------------------
+const BREACH_URL = 'https://haveibeenpwned.com/api/v3/breaches';
+let breachMem = null;
+let breachIdx = null;
+const stripHtml = (h) => String(h || '').replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+async function breachData({ refresh = false } = {}) {
+    if (!breachMem) breachMem = (await chrome.storage.local.get('breaches')).breaches || { t: 0, list: [] };
+    const stale = Date.now() - (breachMem.t || 0) > 7 * 24 * 3600e3;
+    if (!refresh && !stale) return breachMem;
+    try {
+        const r = await fetch(BREACH_URL, { cache: 'no-store' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const list = (await r.json()).filter((b) => !b.IsFabricated).map((b) => ({
+            name: b.Name, title: b.Title, domain: String(b.Domain || '').toLowerCase(), date: b.BreachDate, count: b.PwnCount,
+            classes: b.DataClasses || [], verified: !!b.IsVerified, spam: !!b.IsSpamList, desc: stripHtml(b.Description).slice(0, 1500)
+        }));
+        breachMem = { t: Date.now(), list };
+        breachIdx = null;
+        await chrome.storage.local.set({ breaches: breachMem });
+    } catch (e) { logError('breach list', e); }
+    return breachMem;
+}
+function indexOf(data) {
+    const idx = new Map();
+    for (const b of data.list) if (b.domain) (idx.get(b.domain) || idx.set(b.domain, []).get(b.domain)).push(b);
+    // Real, verified breaches first (scraped and spam lists after), newest first
+    const rank = (b) => (b.verified ? 0 : 2) + (b.spam ? 1 : 0);
+    for (const arr of idx.values()) arr.sort((a, b) => rank(a) - rank(b) || (b.date || '').localeCompare(a.date || ''));
+    return idx;
+}
+async function breachIndex() {
+    if (!breachIdx) breachIdx = indexOf(await breachData());
+    return breachIdx;
+}
+function breachIndexNow() {          // never waits (the popup must answer instantly)
+    if (!breachIdx && breachMem) breachIdx = indexOf(breachMem);
+    if (!breachMem) breachData().catch(() => {});
+    return breachIdx || new Map();
+}
+function breachesFor(host, idx) {
+    for (const d of hostChain(String(host).replace(/^www\./, ''))) { const hit = idx.get(d); if (hit) return hit; }
+    return [];
+}
+chrome.alarms?.onAlarm.addListener((a) => { if (a.name === 'breaches') settings().then((s) => s.tweaks.siteBreaches && breachData()); });
+chrome.alarms?.create('breaches', { delayInMinutes: 3, periodInMinutes: 24 * 60 });
+
+// ---------------------------------------------------------------------------
+// Copy clean link: tracking redirects skipped, tracking parameters removed
+// ---------------------------------------------------------------------------
+const EXTRA_PARAMS = ['si', 'igsh', 'igshid', 'ref_src', 'ref_url', 'feature', 'pp', 'mibextid', 'rdt', 'share_id', 'smid', '_branch_match_id', '_branch_referrer', 'sh', '__tn__', 'trk', 'trackingId', 'refId', 'spm', 'scm', 'share_source', 'utm_name'];
+async function cleanUrl(raw) {
+    let url = String(raw || '');
+    for (const p of UNWRAP) {
+        if (!new RegExp(p.re, 'i').test(url)) continue;
+        try {
+            const u = new URL(url);
+            for (const name of p.params) {
+                const v = name === '*' ? decodeURIComponent(u.search.slice(1)) : u.searchParams.get(name);
+                if (v && /^https?:\/\//i.test(v)) { url = v; break; }
+            }
+        } catch { /* keep */ }
+    }
+    let u;
+    try { u = new URL(url); } catch { return url; }
+    const known = new Set([...(await json('data/params.json').catch(() => [])), ...EXTRA_PARAMS].map((x) => String(x).toLowerCase()));
+    if (/(^|\.)(x|twitter)\.com$/.test(u.hostname)) { known.add('s'); known.add('t'); }
+    for (const k of [...u.searchParams.keys()]) if (known.has(k.toLowerCase()) || /^(utm_|mc_|pk_|hsa_|oly_|vero_|_hs)/i.test(k)) u.searchParams.delete(k);
+    // Amazon product links: just /dp/<id>
+    const asin = /(^|\.)amazon\./.test(u.hostname) && u.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/);
+    if (asin) return `${u.origin}/dp/${asin[1]}`;
+    if (/\/ref=[^/]*$/.test(u.pathname)) u.pathname = u.pathname.replace(/\/ref=[^/]*$/, '');
+    return u.href.replace(/\?(#|$)/, '$1');
+}
+// Runs in the page: copy, then show a small confirmation
+function copyAndTell(text, changed) {
+    const done = (ok) => {
+        const host = document.createElement('dxblock-toast');
+        host.style.cssText = 'all:initial;position:fixed;z-index:2147483647;left:50%;bottom:24px;transform:translateX(-50%)';
+        const root = host.attachShadow({ mode: 'closed' });
+        root.innerHTML = '<style>div{font:13px/1.4 system-ui,sans-serif;color:#f4f4f6;background:#121216;border:1px solid rgba(229,9,20,.45);border-radius:12px;padding:9px 14px;box-shadow:0 12px 32px rgba(0,0,0,.5);max-width:520px}b{color:#ff4d57}small{display:block;color:#8d8d99;word-break:break-all;margin-top:2px;user-select:all}</style><div><b>dx.block</b> <span></span><small></small></div>';
+        root.querySelector('span').textContent = ok ? (changed ? 'Clean link copied (trackers removed)' : 'Link copied (it had no trackers)') : 'Couldn’t copy. Select the link below:';
+        root.querySelector('small').textContent = text;
+        (document.body || document.documentElement).appendChild(host);
+        setTimeout(() => host.remove(), ok ? 3500 : 12000);
+    };
+    const legacy = () => {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+        document.documentElement.appendChild(ta); ta.select();
+        let ok = false; try { ok = document.execCommand('copy'); } catch { /* ignore */ }
+        ta.remove(); done(ok);
+    };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => done(true), legacy); else legacy();
+}
+// Runs in the page: let the user copy, paste, select and right-click again
+function unlockPage() {
+    if (window.__dxbUnlocked) return true;
+    window.__dxbUnlocked = true;
+    const stop = (e) => e.stopImmediatePropagation();
+    for (const t of ['copy', 'cut', 'paste', 'contextmenu', 'selectstart', 'dragstart']) window.addEventListener(t, stop, true);
+    window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && /^[acvx]$/i.test(e.key)) e.stopImmediatePropagation(); }, true);
+    for (const el of document.querySelectorAll('[oncopy],[oncut],[onpaste],[oncontextmenu],[onselectstart],[ondragstart]')) {
+        for (const a of ['oncopy', 'oncut', 'onpaste', 'oncontextmenu', 'onselectstart', 'ondragstart']) el.removeAttribute(a);
+    }
+    const st = document.createElement('style');
+    st.textContent = '*, *::before, *::after { -webkit-user-select: text !important; user-select: text !important; -webkit-touch-callout: default !important; }';
+    (document.head || document.documentElement).appendChild(st);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 function setupMenus() {
     chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({ id: 'pick', title: 'Block element…', contexts: ['page', 'image', 'frame', 'link', 'video'] });
+        chrome.contextMenus.create({ id: 'clean-link', title: 'Copy clean link', contexts: ['link'] });
+        chrome.contextMenus.create({ id: 'clean-page', title: 'Copy clean link to this page', contexts: ['page'] });
     });
 }
 chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId === 'pick' && tab?.id) startPicker(tab.id).catch(() => {});
+    if ((info.menuItemId === 'clean-link' || info.menuItemId === 'clean-page') && tab?.id) {
+        const raw = info.menuItemId === 'clean-link' ? info.linkUrl : (info.pageUrl || tab.url);
+        cleanUrl(raw).then((url) => chrome.scripting.executeScript({
+            target: { tabId: tab.id, frameIds: [info.frameId || 0] }, func: copyAndTell, args: [url, url !== raw]
+        })).catch((e) => logError('clean link', e));
+    }
 });
 chrome.commands.onCommand.addListener(async (cmd, tab) => {
     if (cmd === 'pick-element' && tab?.id) startPicker(tab.id).catch(() => {});

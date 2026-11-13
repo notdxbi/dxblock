@@ -377,6 +377,7 @@ async function main() {
         stats[list.id].rulesets = ids;
     }
     log(`site-wide tracking parameters stripped: ${globalParams.size}`);
+    write('data/params.json', JSON.stringify([...globalParams].sort()));   // used by "Copy clean link"
 
     // Domains whose pop-ups are always closed: ad servers, malware and scam hosts
     const popupDomains = new Set();

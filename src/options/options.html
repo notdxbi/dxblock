@@ -13,6 +13,7 @@
     <nav>
       <a href="#lists" class="on">Filter lists</a>
       <a href="#privacy">Privacy &amp; IP</a>
+      <a href="#breaches">Data breaches</a>
       <a href="#filters">My filters</a>
       <a href="#sites">Allowed sites</a>
       <a href="#about">About</a>
@@ -74,6 +75,7 @@
 
     <div class="group"><h2>Tracking protection</h2>
       <label class="list"><div class="info"><div class="name">Anti-fingerprinting</div><div class="meta">Adds invisible noise to the canvas, WebGL, audio and font checks sites use to identify you without cookies, and hides your exact hardware. Brave already does this; it matters most on Chrome and Firefox.</div></div><span class="switch"><input type="checkbox" data-tweak="fingerprint"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Block screen recording</div><div class="meta">Stops &ldquo;session replay&rdquo; services (Hotjar, FullStory, Microsoft Clarity, LogRocket, Mouseflow and 30 more) that record your mouse, scrolling, clicks and typing so the site can watch your visit back like a video. The popup tells you when a site tried.</div></div><span class="switch"><input type="checkbox" data-tweak="replay"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Block third-party cookies</div><div class="meta">Other companies' scripts, images and pixels can't read or set cookies, so they can't follow you from site to site. Embedded videos and logins inside frames keep working.</div></div><span class="switch"><input type="checkbox" data-tweak="cookies3p"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Block tracking beacons</div><div class="meta">Stops the hidden "someone clicked / left the page" pings that sites send to other companies.</div></div><span class="switch"><input type="checkbox" data-tweak="beacons"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Skip tracking links</div><div class="meta">Links through google.com/url, l.facebook.com, out.reddit.com, LinkedIn, VK, DuckDuckGo and others go straight to the real site, so nobody logs what you clicked.</div></div><span class="switch"><input type="checkbox" data-tweak="unwrap"><span></span></span></label>
@@ -86,8 +88,23 @@
     <div class="group"><h2>Browsing safety</h2>
       <label class="list"><div class="info"><div class="name">Warn about fake sites</div><div class="meta">Spots look-alike domains imitating PayPal, banks, Microsoft, Steam, Discord and 90 other brands (paypa1.com, раypal.com with a Cyrillic "а", paypal.com.account-check.xyz) and stops before the page loads.</div></div><span class="switch"><input type="checkbox" data-tweak="lookalike"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Warn before typing passwords on insecure pages</div><div class="meta">Shows a warning when you click a password box on a page that isn't encrypted (http).</div></div><span class="switch"><input type="checkbox" data-tweak="httpWarn"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Protect my clipboard</div><div class="meta">Stops sites from changing what you copy: removes &ldquo;Read more at&hellip;&rdquo; text glued onto copied text, blocks swapping a copied crypto wallet, IBAN or card number for a different one, and stops sites writing to your clipboard unless you clicked.</div></div><span class="switch"><input type="checkbox" data-tweak="clipboard"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Show data breaches for sites</div><div class="meta">The popup tells you when the site you&rsquo;re on has leaked its users&rsquo; data, using Have I Been Pwned&rsquo;s public list of breaches. The list is downloaded once a week and checked on your computer, so the sites you visit aren&rsquo;t sent anywhere.</div></div><span class="switch"><input type="checkbox" data-tweak="siteBreaches"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">HTTPS-only</div><div class="meta">Every connection is upgraded to encrypted HTTPS. If a site has no HTTPS, dx.block falls back to the plain version for that site.</div></div><span class="switch"><input type="checkbox" data-tweak="httpsOnly"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Stop IP leaks (WebRTC)</div><div class="meta">Stops websites from discovering your real and local IP through WebRTC, even behind a VPN or proxy. Video calls still work.</div></div><span class="switch"><input type="checkbox" data-tweak="webrtc"><span></span></span></label>
+    </div>
+
+    <div class="group"><h2>Annoyances &amp; tricks</h2>
+      <label class="list"><div class="info"><div class="name">Answer cookie banners with &ldquo;Reject all&rdquo;</div><div class="meta">Instead of only hiding cookie pop-ups, dx.block presses &ldquo;Reject all&rdquo; (or &ldquo;Only necessary&rdquo;) for you, so the site records that you said no. Works with OneTrust, Cookiebot, Quantcast, Didomi, Google, Usercentrics and most others.</div></div><span class="switch"><input type="checkbox" data-tweak="consent"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Spot manipulation tricks</div><div class="meta">Outlines dark patterns in orange and says what they are when you hover: fake countdown timers, &ldquo;only 2 left!&rdquo; and &ldquo;14 people are looking&rdquo; pressure, guilt-trip buttons like &ldquo;No thanks, I hate saving money&rdquo;, and pre-ticked marketing boxes. Nothing is clicked or changed.</div></div><span class="switch"><input type="checkbox" data-tweak="darkPatterns"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Privacy grades in search results</div><div class="meta">Google, Bing, DuckDuckGo, Brave Search, Startpage and Ecosia results get a small A&ndash;F badge for sites you&rsquo;ve visited before (from what dx.block saw them try), and a red &ldquo;breach&rdquo; chip for sites that leaked user data. Worked out on your computer; nothing is sent.</div></div><span class="switch"><input type="checkbox" data-tweak="searchGrades"><span></span></span></label>
+    </div>
+
+    <div class="group"><h2>Distractions</h2>
+      <label class="list"><div class="info"><div class="name">Hide AI answers and sponsored results in search</div><div class="meta">Removes Google AI Overviews and the &ldquo;AI Mode&rdquo; button, Bing Copilot answers, DuckDuckGo Search Assist and Brave&rsquo;s AI answer, plus the sponsored results at the top and bottom.</div></div><span class="switch"><input type="checkbox" data-tweak="hideAI"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Hide YouTube Shorts</div><div class="meta">Removes Shorts shelves, the Shorts button and Shorts in search and subscriptions. Shorts links open as normal videos.</div></div><span class="switch"><input type="checkbox" data-tweak="hideShorts"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Hide YouTube end-screen suggestions</div><div class="meta">Removes the video cards that cover the end of a video, the wall of suggestions when it finishes, and info cards during playback.</div></div><span class="switch"><input type="checkbox" data-tweak="hideEndscreens"><span></span></span></label>
+      <label class="list"><div class="info"><div class="name">Hide Amazon sponsored products</div><div class="meta">Removes &ldquo;Sponsored&rdquo; results and ad slots from Amazon searches and product pages, on all Amazon country sites.</div></div><span class="switch"><input type="checkbox" data-tweak="hideAmazonAds"><span></span></span></label>
     </div>
 
     <div class="group"><h2>Clean up</h2>
@@ -106,6 +123,42 @@
       <label class="list"><div class="info"><div class="name">Skip YouTube sponsor segments</div><div class="meta">Jumps over sponsor reads, self-promotion and "like and subscribe" reminders using the community SponsorBlock database. Only a 4-character hash prefix of the video is sent, so the service can't tell what you watch.</div></div><span class="switch"><input type="checkbox" data-tweak="sponsorblock"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Block "Allow notifications?" prompts</div><div class="meta">Websites can't ask to send you push notifications. Sites you already allowed keep working.</div></div><span class="switch"><input type="checkbox" data-tweak="notifications"><span></span></span></label>
       <label class="list"><div class="info"><div class="name">Fast fixes</div><div class="meta" id="hotfix-meta">A few times a day, downloads a small list of fixes from the dx.block repository so new ads and broken sites get fixed without waiting for an update (filter data only, never code).</div></div><span class="switch"><input type="checkbox" data-tweak="hotfix"><span></span></span></label>
+    </div>
+  </section>
+
+  <section id="breaches" class="tab" hidden>
+    <h1>Data breaches</h1>
+    <p class="muted">Find out if your accounts were in a data leak and what was exposed, so you know which passwords to change.</p>
+
+    <div class="group"><h2>Check an email address</h2>
+      <div class="card">
+        <form class="site-add" id="br-form"><input id="br-email" type="email" placeholder="you@example.com" autocomplete="email" spellcheck="false" aria-label="Email address" required><button class="primary" id="br-go">Check</button></form>
+        <label class="inline"><input type="checkbox" id="br-remember" checked> Remember this address on this computer, so I can re-check it and spot new breaches</label>
+        <p class="muted small">The address is sent over HTTPS to <a href="https://xposedornot.com" target="_blank" rel="noopener">XposedOrNot</a>, a free, open breach database, and nowhere else. The details for each breach come from <a href="https://haveibeenpwned.com" target="_blank" rel="noopener">Have I Been Pwned</a>&rsquo;s public list, which dx.block keeps locally.</p>
+        <div id="br-status" class="br-status"></div>
+        <div id="br-results" class="br-results"></div>
+      </div>
+      <div id="br-saved-wrap" hidden>
+        <h2>Saved addresses</h2>
+        <ul class="br-saved" id="br-saved"></ul>
+        <div class="bar"><button id="br-all">Check all again</button><span id="br-all-status" class="muted"></span></div>
+      </div>
+    </div>
+
+    <div class="group"><h2>Check a password</h2>
+      <div class="card">
+        <form class="site-add" id="pw-form"><input id="pw" type="password" placeholder="A password you use" autocomplete="off" aria-label="Password" required><button class="primary">Check</button></form>
+        <p class="muted small">Your password never leaves this computer. dx.block scrambles it (SHA-1) and sends only the first 5 of its 40 characters to Have I Been Pwned&rsquo;s Pwned Passwords service, which sends back every leaked password starting with those characters. The match is checked here.</p>
+        <div id="pw-status" class="br-status"></div>
+      </div>
+    </div>
+
+    <div class="group"><h2>Look up a website</h2>
+      <div class="card">
+        <form class="site-add" id="bs-form"><input id="bs" placeholder="Search by site or name, e.g. linkedin" autocomplete="off" spellcheck="false" aria-label="Site or breach name"></form>
+        <p class="muted small" id="bs-meta">Loading the breach list…</p>
+        <div id="bs-results" class="br-results"></div>
+      </div>
     </div>
   </section>
 
