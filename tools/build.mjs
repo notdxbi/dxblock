@@ -2,6 +2,7 @@
 // Builds dx.block into dist/:
 //   node tools/build.mjs            download fresh lists, compile, package
 //   node tools/build.mjs --offline  reuse the cached lists in .cache/lists
+import { checkRegexes, regexKey } from './regex-check.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -338,6 +339,26 @@ async function main() {
         stats[c.list.id].rules = c.merged.length;
     }
     log(`duplicate rules removed across lists: ${dupes}`);
+    // Chrome skips (with a warning on chrome://extensions) any regex over its 2 KB compiled-memory limit:
+    // ask Chrome which ones it can't compile and leave them out
+    const regexItems = [];
+    for (const { merged } of compiled) for (const r of merged) {
+        if (r.condition.regexFilter) regexItems.push({ regex: r.condition.regexFilter, caseSensitive: !!r.condition.isUrlFilterCaseSensitive });
+    }
+    const regexOk = await checkRegexes(regexItems);
+    if (regexOk) {
+        let tooBig = 0;
+        for (const c of compiled) {
+            c.merged = c.merged.filter((r) => {
+                if (!r.condition.regexFilter) return true;
+                const ok = regexOk.get(regexKey(r.condition.regexFilter, !!r.condition.isUrlFilterCaseSensitive));
+                if (!ok) tooBig++;
+                return ok;
+            });
+            stats[c.list.id].rules = c.merged.length;
+        }
+        log(`regex rules Chrome can't compile (2 KB limit), left out: ${tooBig} of ${regexItems.length}`);
+    }
     for (const { list, merged } of compiled) {
         for (const r of merged) {
             const p = rpParams(r);

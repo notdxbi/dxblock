@@ -30,6 +30,11 @@
     </div>
   </section>
 
+  <label class="list master" id="master-row">
+    <div class="info"><div class="name" id="master-name">dx.block is on</div><div class="meta" id="master-meta">Blocking ads, trackers and pop-ups everywhere except your allowed sites.</div></div>
+    <span class="switch"><input type="checkbox" id="master"><span></span></span>
+  </label>
+
   <section id="lists" class="tab">
     <h1>Filter lists</h1>
     <p class="muted">The same community lists that power uBlock Origin, AdGuard and Adblock Plus, compiled into Chrome's native, fast blocking engine. Lists update with each extension release.</p>
@@ -129,9 +134,13 @@ example.com##+js(set-constant, adsEnabled, false)
 
   <section id="sites" class="tab" hidden>
     <h1>Allowed sites</h1>
-    <p class="muted">dx.block is switched off on these sites (one per line). You can also toggle a site from the toolbar button.</p>
-    <textarea id="sites-list" spellcheck="false" placeholder="example.com"></textarea>
-    <div class="bar"><button class="primary" id="save-sites">Save</button><span id="sites-status" class="muted"></span></div>
+    <p class="muted">dx.block doesn't block anything on these sites (or their subdomains). Add one below, remove one with ×, or switch a site off from the toolbar button.</p>
+    <form class="site-add" id="site-add"><input id="site-input" placeholder="example.com or https://example.com/page" autocomplete="off" spellcheck="false" aria-label="Site to allow"><button class="primary">Allow site</button></form>
+    <ul class="site-chips" id="site-chips"></ul>
+    <details class="howto"><summary>Paste a list instead</summary>
+      <textarea id="sites-list" spellcheck="false" placeholder="example.com"></textarea>
+      <div class="bar"><button id="save-sites">Save list</button><span id="sites-status" class="muted"></span></div>
+    </details>
   </section>
 
   <section id="about" class="tab" hidden>

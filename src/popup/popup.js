@@ -117,16 +117,42 @@ function renderStats(s, opts = {}) {
     renderCompanies(s);
 }
 
+function renderAllowed() {
+    const sites = state.allowedSites || [];
+    $('allowed-count').textContent = sites.length ? `${sites.length} site${sites.length === 1 ? '' : 's'}` : '';
+    const list = $('allowed-list');
+    list.innerHTML = '';
+    if (!sites.length) { const li = document.createElement('li'); li.className = 'none'; li.textContent = 'None yet: dx.block blocks everywhere'; list.append(li); return; }
+    for (const site of sites) {
+        const li = document.createElement('li');
+        if (state.host && (state.host === site || state.host.endsWith(`.${site}`))) li.className = 'here';
+        const name = document.createElement('span'); name.textContent = site;
+        const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.title = `Block on ${site} again`; x.setAttribute('aria-label', x.title);
+        x.addEventListener('click', async () => {
+            state.allowedSites = await send({ type: 'sites:remove', host: site });
+            state.disabled = state.allowedSites.some((s) => state.host === s || state.host.endsWith(`.${s}`));
+            renderSite(); renderAllowed();
+        });
+        li.append(name, x);
+        list.append(li);
+    }
+}
+
 function renderSite() {
     const onWeb = state.web;
+    const on = state.enabled !== false;
+    document.body.classList.toggle('off', !on);
+    $('global').setAttribute('aria-pressed', String(on));
+    $('global').title = on ? 'Turn dx.block off everywhere' : 'Turn dx.block back on';
     $('host').textContent = onWeb ? state.host.replace(/^www\./, '') : 'This page can’t be scanned';
     $('power').checked = !state.disabled;
     $('site-title').textContent = state.disabled ? 'Protection paused' : 'Protection on';
     $('site-sub').textContent = state.disabled ? 'Everything is allowed on this site' : 'Blocking ads & trackers on this site';
-    $('status-text').textContent = !onWeb ? 'Idle' : state.disabled ? 'Paused' : 'Live';
+    $('status-text').textContent = !on ? 'Off' : !onWeb ? 'Idle' : state.disabled ? 'Paused' : 'Live';
+    if (!on) { $('power').checked = false; $('site-title').textContent = 'dx.block is off'; $('site-sub').textContent = 'Nothing is blocked anywhere. Press the power button to turn it back on.'; }
     document.body.classList.toggle('paused', state.disabled);
     document.body.classList.toggle('na', !onWeb);
-    web.paused = state.disabled || !onWeb;
+    web.paused = state.disabled || !onWeb || !on;
     $('access').hidden = state.hasAccess !== false;
     $('update').hidden = !state.update;
     if (state.update) { $('update').href = state.update.url; $('update-v').textContent = `v${state.update.version}`; }
@@ -178,8 +204,10 @@ async function load(first) {
     const s = await send({ type: 'popup:state', tabId: tab.id });
     if (!s || s.error) return;
     const fresh = !state;
+    const prevAllowed = state && JSON.stringify(state.allowedSites);
     state = s;
     renderSite();
+    if (fresh || prevAllowed !== JSON.stringify(s.allowedSites)) renderAllowed();
     if (fresh) {
         const recent = [...s.recent].reverse();
         for (const ev of recent.slice(-9)) feedItem(ev, false);
@@ -222,6 +250,25 @@ document.querySelectorAll('.ftab').forEach((b) => b.addEventListener('click', ()
     document.querySelectorAll('.ftab').forEach((x) => x.classList.toggle('on', x === b));
     document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== b.dataset.view; });
 }));
+
+// Main switch
+$('global').addEventListener('click', async () => {
+    state.enabled = state.enabled === false;
+    renderSite();
+    await send({ type: 'global:toggle', enabled: state.enabled });
+    chrome.tabs.reload(tab.id);
+});
+
+// Allowed sites
+$('allowed-add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = $('allowed-input').value.trim();
+    if (!v) return;
+    state.allowedSites = await send({ type: 'sites:add', host: v });
+    $('allowed-input').value = '';
+    state.disabled = state.allowedSites.some((s) => state.host === s || state.host.endsWith(`.${s}`));
+    renderSite(); renderAllowed();
+});
 
 // Actions
 $('power').addEventListener('change', async (e) => {

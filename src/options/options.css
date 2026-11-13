@@ -61,3 +61,21 @@ code { font: 12.5px ui-monospace, monospace; background: rgba(255,255,255,.07); 
 .fields input:focus, .fields select:focus { outline: none; border-color: rgba(229,9,20,.6); box-shadow: 0 0 0 3px rgba(229,9,20,.15); }
 .diag { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 13px; padding: 14px; font: 12.5px/1.55 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto; }
 .small-area { min-height: 90px; margin-top: 4px; font-size: 13px; }
+
+/* Main switch */
+.list.master { margin: 0 0 18px; }
+.list.master .name { font-size: 15px; }
+body.off .list.master { border-color: rgba(229,9,20,.5); background: rgba(229,9,20,.08); }
+body.off .hero { filter: grayscale(1); opacity: .5; }
+
+/* Allowed sites */
+.site-add { display: flex; gap: 8px; margin: 14px 0 12px; }
+.site-add input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--panel-solid); color: var(--text); font: inherit; outline: none; }
+.site-add input:focus { border-color: rgba(229,9,20,.6); box-shadow: 0 0 0 3px rgba(229,9,20,.15); }
+.site-chips { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.site-chips li { display: inline-flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+.site-chips li.none { padding: 6px 12px; color: var(--muted); background: transparent; }
+.site-chips button { padding: 0 7px; border-radius: 999px; background: transparent; color: var(--muted); font-size: 16px; line-height: 1.2; }
+.site-chips button:hover { color: #fff; background: rgba(229,9,20,.4); }
+.howto summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.howto textarea { min-height: 160px; }

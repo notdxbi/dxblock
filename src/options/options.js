@@ -87,11 +87,48 @@ $('save-filters').addEventListener('click', async () => {
     st.textContent = `${res.ok} filters active` + (res.errors.length ? ` · ${res.errors.length} not supported: ${res.errors.slice(0, 3).join('  ')}` : '');
 });
 
-// Allowed sites
+// Main switch
+const renderMaster = (on) => {
+    $('master').checked = on;
+    document.body.classList.toggle('off', !on);
+    $('master-name').textContent = on ? 'dx.block is on' : 'dx.block is off';
+    $('master-meta').textContent = on ? 'Blocking ads, trackers and pop-ups everywhere except your allowed sites.' : 'Nothing is blocked anywhere. Switch it back on when you\'re ready.';
+};
+renderMaster(data.on !== false);
+$('master').addEventListener('change', async (e) => {
+    renderMaster(e.target.checked);
+    await send({ type: 'global:toggle', enabled: e.target.checked });
+});
+
+// Allowed sites: add / remove one at a time (the textarea under "Paste a list instead" still works)
+function renderChips(sites) {
+    const box = $('site-chips');
+    box.innerHTML = '';
+    if (!sites.length) { const li = document.createElement('li'); li.className = 'none'; li.textContent = 'No allowed sites: dx.block blocks everywhere.'; box.append(li); }
+    for (const site of sites) {
+        const li = document.createElement('li');
+        const name = document.createElement('span'); name.textContent = site;
+        const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.title = `Block on ${site} again`; x.setAttribute('aria-label', x.title);
+        x.addEventListener('click', async () => { const clean = await send({ type: 'sites:remove', host: site }); renderChips(clean); $('sites-list').value = clean.join('\n'); });
+        li.append(name, x);
+        box.append(li);
+    }
+}
+renderChips(data.disabledSites);
+$('site-add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = $('site-input').value.trim();
+    if (!v) return;
+    const clean = await send({ type: 'sites:add', host: v });
+    $('site-input').value = '';
+    renderChips(clean);
+    $('sites-list').value = clean.join('\n');
+});
 $('sites-list').value = data.disabledSites.join('\n');
 $('save-sites').addEventListener('click', async () => {
     const clean = await send({ type: 'options:set-sites', sites: $('sites-list').value.split('\n') });
     $('sites-list').value = clean.join('\n');
+    renderChips(clean);
     $('sites-status').className = 'ok';
     $('sites-status').textContent = `${clean.length} site${clean.length === 1 ? '' : 's'} allowed`;
 });
