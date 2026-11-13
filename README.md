@@ -1,11 +1,28 @@
-<p align="center"><img src="src/icons/icon-128.png" width="104" alt="dx.block"></p>
-<h1 align="center">dx.block</h1>
-<p align="center"><b>The ad blocker that blocks everything.</b><br>Free, open source, and built for Brave, Chrome, Edge, Firefox and every Chromium browser.</p>
+<!-- Header: the same wave as github.com/notdxbi -->
+<p align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0b0b0d,50:7a0a10,100:e50914&height=200&section=header&text=dx.block&fontSize=72&fontColor=ffffff&fontAlignY=38&desc=The%20ad%20blocker%20that%20blocks%20everything&descAlignY=60&descSize=18&animation=fadeIn" alt="dx.block" width="100%"/>
+</p>
+
+<p align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Inter&weight=600&size=22&duration=3200&pause=900&color=E50914&center=true&vCenter=true&width=640&lines=100%25+on+superadblocktest+%E2%80%A2+132%2F132+on+turtlecute;Brave+%E2%80%A2+Chrome+%E2%80%A2+Edge+%E2%80%A2+Firefox;Ads%2C+trackers%2C+pop-ups%2C+cookie+banners%3A+gone;Free%2C+open+source%2C+no+account%2C+no+tracking" alt="What dx.block does"/>
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><b>⬇ Download dx.block</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://discord.gg/nnVBjqZ84F"><b>💬 Join the Discord</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://buymeacoffee.com/notdxbi"><b>☕ Support dx.bi</b></a>
+</p>
+
 <p align="center">
   <a href="../../releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/notdxbi/dxblock?label=download&color=e50914&style=flat-square"></a>
-  <img alt="100% on superadblocktest.com" src="https://img.shields.io/badge/superadblocktest-100%25-22d38a?style=flat-square">
-  <img alt="132/132 on adblock.turtlecute.org" src="https://img.shields.io/badge/turtlecute-132%2F132-22d38a?style=flat-square">
+  <img alt="100% on superadblocktest.com" src="https://img.shields.io/badge/superadblocktest-100%25-e50914?style=flat-square">
+  <img alt="132/132 on adblock.turtlecute.org" src="https://img.shields.io/badge/turtlecute-132%2F132-e50914?style=flat-square">
+  <img alt="Brave · Chrome · Edge · Firefox" src="https://img.shields.io/badge/Brave%20·%20Chrome%20·%20Edge%20·%20Firefox-222?style=flat-square">
   <a href="LICENSE"><img alt="GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-222?style=flat-square"></a>
+  <a href="https://discord.gg/nnVBjqZ84F"><img alt="Discord" src="https://img.shields.io/badge/Discord-join-5865F2?style=flat-square&logo=discord&logoColor=white"></a>
+  <a href="https://buymeacoffee.com/notdxbi"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black"></a>
 </p>
 
 <p align="center"><img src="docs/popup.png" width="300" alt="The dx.block popup: a live web of the trackers being caught"></p>
@@ -138,3 +155,13 @@ dx.block is free software under the **GNU GPL v3** ([LICENSE](LICENSE)), built o
 [Malicious URL Blocklist](https://gitlab.com/malware-filter/urlhaus-filter) ·
 [Fanboy's lists](https://secure.fanboy.co.nz/).
 dx.block isn't affiliated with any of these projects or with the other blockers named above.
+
+---
+
+<p align="center">
+  <sub>Part of the <b>dx.bi</b> family: <a href="https://github.com/notdxbi/dxbi-stremio">dx.bi</a>, the Netflix-style streaming app · <b>dx.block</b> · more on <a href="https://github.com/notdxbi">github.com/notdxbi</a></sub>
+</p>
+
+<p align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:e50914,50:7a0a10,100:0b0b0d&height=110&section=footer" width="100%" alt=""/>
+</p>
